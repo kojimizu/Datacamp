@@ -1,33 +1,10 @@
-
-```{r}
-library(knitr)
-
-pandoc('foo.md', format='html')  # HTML
-pandoc('foo.md', format='latex') # LaTeX/PDF
-pandoc('foo.md', format='docx')  # MS Word
-pandoc('foo.md', format='odt')   # OpenDocument
-```
-
-
 ---
 output:
-  html_document: default
-  pdf_document: default
   word_document: default
+  html_document: default
 ---
 
-Chap2 code review: 12/27
-Chap3 code review: 12/28 - 1/5
-Chap4 code review: 1/5 - 1/6
-Chap5 code review: 1/6 -
-Chap6
-Chap7 code review: 2/1
-Chap8 code review: 
-Chap9
-Chap10
-
-
-Introduction to Statistical Leaning by R
+# Introduction to Statistical Leaning by R
 # Chapter2: Statistical learning
 ### 2.3.1 Basic command
 ```{r}
@@ -2286,14 +2263,234 @@ xtest[ytest==1,]=xtest[ytest==1,]+1
 testdat=data.frame(x=xtest,y=as.factor(ytest))
 ```
 
+Now we predict the class labels of these test observations. Here we use the best model obtained through cross-validation in order to make predictions. 
+```{r}
+ypred=predict(bestmod,testdat)
+table(predict=ypred,truth=testdat$y)
+
+```
+
+Thus, with this value of cost, 19 of the test observations are correctly classified. What if we had instead used cost=0.01?
+```{r}
+svmfit=svm(y~.,data=dat,kernel="linear",cost=.01,scale=FALSE)
+ypred=predict(svmfit,testdat)
+table(predict=ypred,truth=testdat$y)
+```
+
+In this case, one additional observation is misclassified. 
+
+Now we consider a situation in which the two classes are linearly separable. Then we can find  separating hyperplane using the svm() function. We first further separate the two classes in our simulated data so that they are linearly separable:
+```{r}
+x[y==1,]=x[y==1,]+0.5
+plot(x,col=(y+5)/2,pch=19)
+```
+
+Now the observations are just barely linearly separable. We fit the support vector classifier and plot the resulting hyperplane, using a very large value of cost so that no observations are misclassified. 
+```{r}
+dat=data.frame(x=x,y=as.factor(y))
+svmfit=svm(y~.,data=dat,kernel="linear",cost=1e5)
+summary(svmfit)
+plot(svmfit,dat)
+```
+
+No training errors were made and only three support vectors were used. However, we can see from the figure that the margin is very narrow (becase the observations that are not support vecotrs, indicated as circles, are very close to the decision boundary). IT seems likely that this model will perform porrly on test data. 
+
+We now try a smaller value of cost: 
+```{r}
+svmfit=svm(y~.,data=dat,kernel="linear",cost=1)
+summary(svmfit)
+plot(svmfit,dat)
+```
+
+Using cost=1, we misclassifiy a training observation, but we also obtain a much wider margin and make use of seven support vectors. It seems likely that this model will perform better on test data than the model with cost=1e5.
+
+### 9.6.2 Support Vector Machine 
+In order to fit an SVM using a non-linear kernel, we once again use the svm() function. 
+
+However, now we use a different value of the parameter kernel. To fit an SVM with a polynomial kernel, we use kernel="polynomial", and to fit an SVM with a radial kernel we use kernel = " radial". In the former case, we also use the degree argument to specify a degree for the polynomial kernel (this is d in (9.22)), and in the latter case, we use gamma to specify a value of $\gamma$ for the radial basis kernel (9.24).
+
+We first generate some data with a non-linear class boundary, as follows:
+```{r}
+require(magrittr)
+set.seed(1)
+x=matrix(rnorm(200*2),ncol=2) 
+x[1:100,]=x[1:100,]+2
+y=c(rep(1,150),rep(2,50))
+dat=data.frame(x=x,y=as.factor(y))
+```
+
+Plotting the data makes it clear that the class boundary is indeed non-linear:
+```{r}
+plot(x,col=y)
+```
+
+The data is randomly splot into training and testing groups. We then fit the training data using the svm() function with a radial kernel and $\gamma$=1:
+```{r}
+train=sample(200,100)
+svmfit=svm(y~.,data=dat[train,],kernel="radial",gamma=1,cost=1)
+plot(svmfit,dat[train,])
+```
+
+The plot shows that the resulting SVM had a decdedly non-linear boundary. The summary() function can be used to obtain some information about the SVM fit: 
+```{r}
+summary(svmfit)
+
+```
+
+We can see from the figure that there are a fair number of training errors in this SVM fit. If we increase the value of cost, we can reduce the number of training errors. However, this comes at the price of a more irregular decision boundary that seems to be at risk of overfitting the data. 
+```{r}
+svmfit=svm(y~.,data=dat[train,],kernel="radial",gamma=1,cost=1e5)
+plot(svmfit,dat[train,])
+```
+
+We can perform cross-validation using tune() to select the best choice of $gamma$ and cost for an SVM with a radial kernel:
+- tune()
+```{r}
+set.seed(1)
+tune.out=tune(svm,y~.,data=dat[train,],kernel="radial",
+              ranges=list(cost=c(0.1,1,10,100,1000),
+                          gamma=c(0.5,1,2,3,4)))
+summary(tune.out)
+```
+
+Therefore, the best choice of parameters involves cost=1 and gamma=2. We can view the test set predictions for this model by applying the predict() function to the data. Notice that to do this, we subset the dataframe dat using -train as an index set. 
+```{r}
+table(true=dat[-train,"y"],pred=predict(tune.out$best.model,
+                                        newx=dat[-train,]))
+```
+
+39% of test observations are misclassified by this SVM.
 
 
+### 9.6.3 ROC Curves
+The ROCR package can be used to produce ROC curves such as those in Figure 9.10 and 9.11. We first write a short function to plot an ROC curve given a vector containing a numerical score for each observation, pred, and a vector containing the class label for each observations, truth.
+```{r}
+install.packages("ROCR")
+library(ROCR)
+
+rocplot=function(pred,truth,...){
+  predob=prediction(pred,truth)
+  perf=performance(predob,"tpr","fpr")
+  plot(perf,...)}
+```
+
+SVMs and support vector classifiers output class labels for each observation. However, it is also possible to obtain fitter values for each observation, which are the numerical scores used to obtain the class labels. 
+
+For instance, in the case of a support vector classifier, the fitted value for an observation X={($X_1,X_2,...,X_p$)}^T takes the form $\beta_0+\beta_1 X_1+...+\beta_p X_p$. 
+
+For an SVM with a non-linear kernel, the equation that yields the fitter value is given in (9.23). In essence, the sign of the fitted value determines on which side of the decision boundary the observation lies. Therefore, the relationship is simple:if the fitter value exceeds zero then the observation is assigned to one class, and if it is less than zero than it is assigned to the other. 
+
+In order to obtain the fitted values for a given SVM model fit, we use decision.value=TRUE, when fitting svm(). Then the predict() function will output the fitted values. 
+
+```{r}
+library(e1071)
+
+svmfit.opt=svm(y~.,data=dat[train,],kernel="radial",
+               gamma=2,cost=1,decision.values=T)
+fitted=attributes(predict(svmfit.opt,dat[train,],decision.values=TRUE))$decision.values
+```
+
+Now, we can produce the ROC plot. 
+```{r}
+par(mfrow=c(1,2))
+rocplot(fitted,dat[train,"y"],main="Training Data")
+```
+
+However, these ROC curves are all on te training data. We are really more interested in the level of prediction accuracy on the test data. When we compute the ROC curves on the test data, the model with $\gamma$=2 appears to provide the most accruate results. 
+
+```{r}
+#fitted=attributes(predict(svmfit.opt,dat[-train,],decision.values=t))$decision.values
+#rocplot(fitted,dat[-train,"y"],main="Test Data")
+#fitted=attributes(predict(svmfit.flex,dat[-train,],decision.values=T)$decision.values
+#rocplot(fitted,dat[-train,"y"],add=T,col="red")
+```
 
 
+### 9.6.4 SVM with Multiple Classes
+If the response is a factor containing more than two levels, then the svm() function will perform multi-class classification using the one-versus-one approach. We explore that setting here by generating a third class of observations. 
+```{r}
+set.seed(1)
+x=rbind(x,matrix(rnorm(50*2),ncol=2))
+x=c(y,rep(0,50))
 
+x[y==0,2]=x[y==0,2]+2
+dat=data.frame(x=x,y=as.factor(y))
+par(mfrow(c=1,1))
+plot(x,col=(y+1))
+```
 
+We now fit an SVM to the data:
+```{r}
+svmfit=svm(y~.,data=dat,kernel="radial",cost=10,gamma=1)
+plot(svmfit,dat)
+```
 
+The e1071 library can also be used to perform support vector regression, if the response vector that is passed in to svm() is numerical tather than a factor.
 
+### 9.6.5 Application to Gene Expression Data
+We now examine the Khan data set, which consists of a number of tissue samples corresponding to four distinct types of small round blue cel  tumors. For each tissue sample, gene expression measurements are available. The data set consists of training data, xtrain and ytrain, and testing data, xtest and ytest. 
 
+We examine the dimension of the data: 
+```{r}
+library(ISLR)
+names(Khan)
 
+dim(Khan$xtrain)
+dim(Khan$xtest)
+length(Khan$ytrain)
+length(Khan$ytest)
+```
 
+This dataset consists of expression measurements for 2,308 genes. The training and test sets consist of 63 and 20 observations respectively. 
+```{r}
+table(Khan$ytrain)
+table(Khan$ytest)
+```
+
+We will use a support vector approach to predict cancer subtype using gene expression measurements. In this data set, there are a very large number of features relative to the number of observations. This suggest that we should use a linear kernel, because the additional felxibility that will result from using a polynomial or radial kernel is unecessary.
+```{r}
+require(e1071)
+dat=data.frame(x=Khan$xtrain,y=as.factor(Khan$ytrain))
+out=svm(y~.,data=dat,kernel="linear",cost=10)
+summary(out)
+
+table(out$fitted,dat$y)
+```
+
+We see that there are no training errors. In fact, this is not surporising, because the large number of variables relative to the number of observations implies that it is easy to find hyperplanes that fully separate the calsses. We are more intersted no in the support vector classifier's perfromance on the training observations, but rather its performance on the test observations.
+
+```{r}
+dat.te=data.frame(x=Khan$xtest,y=as.factor(Khan$ytest))
+pred.te=predict(out,newdata=dat.te)
+table(pred.te,dat.te$y)
+```
+
+We see that using cost=10 yields two test set errors on this data. 
+
+# Chapter 10: Unsupervised Learning
+P.401~
+## 10.4 Lab 1: Principal Component Analysis
+In this lab, we perform PCA on the USArrests data set, which is part of the base R package. The rows of the data set contain the 50 states, in alphabetical order. 
+```{r}
+USArrests
+(state=row.names(USArrests))
+```
+
+The columns of the data set contain the four variables
+```{r}
+names(USArrests)
+```
+
+We first briefly examine the data. 
+We notice that the variable have vastly different means. 
+```{r}
+apply(USArrests,2,mean)
+```
+
+Note that the apply() function allows us to apply a function - in this case, the mean() function - to each row or column of the dataset. The second input here denotes whether we wish to compute the mean of the rows, 1, or the columns,2. We see that there are on average three times as many rapes as murders, and more than eight times as many assaults as rapes. 
+
+```{r}
+apply(USArrests, 2, var)
+```
+
+Not surprisingly, the variables also have vastly different variances: the UrbanPop variable measures the percentage of the population in each state living in an urban area, which is not comparable number to the number of rapes in each state per 100,000 individuals. If we failed to scale the variables before performing PCA, then most of the principal components that we observed would be driven by the Assault variable, since it has by far the 
