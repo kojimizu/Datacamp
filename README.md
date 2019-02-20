@@ -1,6 +1,12 @@
-# ISLR
+# Deep Learning Archive
 
-Introduction to Statistical Learning with Application of R
-by 
+## R Commands:  
+1. Deep learning with R 
 
-This notebook covers each chapter's lab codes.
+## Useful resources:  
+1. Deep learning with R  
+The manning provides tutorials related to the textbook.  
+Video:   
+
+2. MIT 6.S191 Intro to DL:  
+Course page is [here](http://introtodeeplearning.com/).  The slides and videos are available.
