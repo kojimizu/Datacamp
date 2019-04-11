@@ -7,7 +7,8 @@ The manning provides tutorials related to the textbook.
 Video: https://www.manning.com/livevideo/deep-learning-with-r-in-motion  
 
 ### 2. Dive into Deep Learning
-The textbook became publicly released on January 2019 by Alice Zheng.
+The textbook became publicly released on January 2019. The PDF is available from the below link.
+https://d2l.ai/
 
 ### UC Business Analytics
 This bookdown webpage covers basic deep learning modeling techniques.  
