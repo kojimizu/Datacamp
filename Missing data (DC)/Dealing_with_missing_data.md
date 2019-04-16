@@ -1,7 +1,7 @@
 Dealing with Missing Data
 ================
 Koji Mizumura
-2019-4-1 - 2019-04-15
+2019-4-1 - 2019-04-16
 
   - [Why care about missing data (NA)](#why-care-about-missing-data-na)
       - [Introduction](#introduction)
