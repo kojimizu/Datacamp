@@ -21,3 +21,6 @@ https://www.datacamp.com/courses/dealing-with-missing-data-in-r
 
 - `naniar`: http://naniar.njtierney.com/  
 - `visdat`: http://visdat.njtierney.com/  
+- `mice`: https://cran.r-project.org/package=mice
+- `Flexible imputation of missing data`: https://www.jstatsoft.org/article/view/v085b04/v85b04.pdf
+
