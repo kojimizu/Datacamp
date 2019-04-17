@@ -1,7 +1,7 @@
 Dealing with Missing Data
 ================
 Koji Mizumura
-2019-4-1 - 2019-04-16
+2019-4-1 - 2019-04-17
 
   - [Why care about missing data (NA)](#why-care-about-missing-data-na)
       - [Introduction](#introduction)
@@ -84,6 +84,18 @@ Koji Mizumura
       - [Evaluating imputations: Across many
         variables](#evaluating-imputations-across-many-variables)
       - [Performing imputations](#performing-imputations)
+      - [Using simputation to impute
+        data](#using-simputation-to-impute-data)
+      - [Evaluating and comparing
+        imputations](#evaluating-and-comparing-imputations)
+      - [Evaluating imputations (many models &
+        variables)](#evaluating-imputations-many-models-variables)
+      - [Evaluating imputations and
+        models](#evaluating-imputations-and-models)
+      - [Combining and comparing many imputation
+        models](#combining-and-comparing-many-imputation-models)
+      - [Evaluating the different parameters in the
+        model](#evaluating-the-different-parameters-in-the-model)
 
 # Why care about missing data (NA)
 
@@ -1966,3 +1978,416 @@ df %>%
 ```
 
 We will use `impute_lm` for `airquality` data.
+
+``` r
+aq_imp_lm <- airquality %>% 
+  bind_shadow() %>% 
+  add_label_shadow() %>% 
+  impute_lm(Solar.R~Wind+Temp+Month) %>% 
+  impute_lm(Ozone~Wind+Temp+Month)
+
+aq_imp_lm
+## # A tibble: 153 x 13
+##     Ozone Solar.R  Wind  Temp Month   Day Ozone_NA Solar.R_NA Wind_NA
+##  *  <dbl>   <dbl> <dbl> <int> <int> <int> <fct>    <fct>      <fct>  
+##  1  41       190    7.4    67     5     1 !NA      !NA        !NA    
+##  2  36       118    8      72     5     2 !NA      !NA        !NA    
+##  3  12       149   12.6    74     5     3 !NA      !NA        !NA    
+##  4  18       313   11.5    62     5     4 !NA      !NA        !NA    
+##  5  -9.04    138.  14.3    56     5     5 NA       NA         !NA    
+##  6  28       178.  14.9    66     5     6 !NA      NA         !NA    
+##  7  23       299    8.6    65     5     7 !NA      !NA        !NA    
+##  8  19        99   13.8    59     5     8 !NA      !NA        !NA    
+##  9   8        19   20.1    61     5     9 !NA      !NA        !NA    
+## 10  35.2     194    8.6    69     5    10 NA       !NA        !NA    
+## # ... with 143 more rows, and 4 more variables: Temp_NA <fct>,
+## #   Month_NA <fct>, Day_NA <fct>, any_missing <chr>
+
+aq_imp_lm %>% 
+  ggplot(
+    aes(x = Solar.R,
+        y = Ozone,
+        col = any_missing))+
+      geom_point()
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-58-1.png" style="display: block; margin: auto;" />
+
+The important is to insert `bind_shadow()` and `add_label_shadow()` to
+detect missingness.
+
+Another useful feature is conducts variants of lm application.
+
+``` r
+aq_imp_small <- airquality %>%
+  bind_shadow() %>%
+  impute_lm(Ozone ~ Wind + Temp) %>%
+  impute_lm(Solar.R ~ Wind + Temp) %>%
+  add_label_shadow()
+
+aq_imp_large <- airquality %>%
+  bind_shadow() %>%
+  impute_lm(Ozone ~ Wind + Temp + Month + Day) %>%
+  impute_lm(Solar.R ~ Wind + Temp + Month + Day)  %>%
+  add_label_shadow()
+```
+
+To compare models, we bind the above two variants.
+
+``` r
+bound_models <- 
+  bind_rows(small = aq_imp_small,
+            large = aq_imp_large,
+            .id   = "imp_model")
+bound_models
+## # A tibble: 306 x 14
+##    imp_model Ozone Solar.R  Wind  Temp Month   Day Ozone_NA Solar.R_NA
+##    <chr>     <dbl>   <dbl> <dbl> <int> <int> <int> <fct>    <fct>     
+##  1 small      41      190    7.4    67     5     1 !NA      !NA       
+##  2 small      36      118    8      72     5     2 !NA      !NA       
+##  3 small      12      149   12.6    74     5     3 !NA      !NA       
+##  4 small      18      313   11.5    62     5     4 !NA      !NA       
+##  5 small     -11.7    127.  14.3    56     5     5 NA       NA        
+##  6 small      28      160.  14.9    66     5     6 !NA      NA        
+##  7 small      23      299    8.6    65     5     7 !NA      !NA       
+##  8 small      19       99   13.8    59     5     8 !NA      !NA       
+##  9 small       8       19   20.1    61     5     9 !NA      !NA       
+## 10 small      29.7    194    8.6    69     5    10 NA       !NA       
+## # ... with 296 more rows, and 5 more variables: Wind_NA <fct>,
+## #   Temp_NA <fct>, Month_NA <fct>, Day_NA <fct>, any_missing <chr>
+```
+
+We can then look at the values.
+
+``` r
+ggplot(bound_models,
+       aes(x = Ozone,
+           y = Solar.R,
+           col = any_missing))+
+  geom_point()+
+  facet_wrap(~imp_model)
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-61-1.png" style="display: block; margin: auto;" />
+
+To explore imputations across multiple variables and models, we gather
+selected variables.
+
+``` r
+bound_models_gather <- bound_models %>%
+  select(Ozone, Solar.R,
+         any_missing, imp_model) %>%
+  gather(key = "variable", value = "value",
+         -any_missing, -imp_model)
+
+bound_models_gather
+## # A tibble: 612 x 4
+##    any_missing imp_model variable value
+##    <chr>       <chr>     <chr>    <dbl>
+##  1 Not Missing small     Ozone     41  
+##  2 Not Missing small     Ozone     36  
+##  3 Not Missing small     Ozone     12  
+##  4 Not Missing small     Ozone     18  
+##  5 Missing     small     Ozone    -11.7
+##  6 Missing     small     Ozone     28  
+##  7 Not Missing small     Ozone     23  
+##  8 Not Missing small     Ozone     19  
+##  9 Not Missing small     Ozone      8  
+## 10 Missing     small     Ozone     29.7
+## # ... with 602 more rows
+```
+
+``` r
+ggplot(bound_models_gather,
+       aes(x = imp_model,
+           y = value)) +
+  geom_boxplot() + 
+  facet_wrap(~variable)
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-63-1.png" style="display: block; margin: auto;" />
+
+``` r
+
+bound_models_gather %>%
+  filter(any_missing == "Missing") %>%
+  ggplot(aes(x = imp_model,
+             y = value)) +
+  geom_boxplot() + 
+  facet_wrap(~variable)
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-63-2.png" style="display: block; margin: auto;" />
+
+## Using simputation to impute data
+
+There are many imputation packages in R. We are going to focus on using
+the `simputation` package, which provides a simple, powerful interface
+into performing imputations.
+
+Building a good imputation model is super important, but it is a complex
+topic - there is as much to building a good imputation model as there is
+for building a good statistical model. In this course, we are going to
+focus on how to evaluate imputations.
+
+First, we are going to look at using `impute_lm()` function, which
+imputes values according to a specified linear model.
+
+In this exercise, we are going to apply the previous assessment
+techniques to data with `impute_lm()`, and then build upon this
+imputation method in subsequent
+lessons.
+
+``` r
+# Impute humidity and air temperature using wind_ew and wind_ns, and track missing values
+ocean_imp_lm_wind <-  oceanbuoys%>% 
+    bind_shadow() %>%
+    impute_lm(air_temp_c ~ wind_ew + wind_ns) %>% 
+    impute_lm(humidity ~ wind_ew + wind_ns) %>%
+    add_label_shadow()
+    
+# Plot the imputed values for air_temp_c and humidity, colored by missingness
+ggplot(ocean_imp_lm_wind, 
+       aes(x = air_temp_c, y = humidity, color = any_missing)) + 
+  geom_point()
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-64-1.png" style="display: block; margin: auto;" />
+
+## Evaluating and comparing imputations
+
+When you build up an imputation model, it’s a good idea to compare it to
+another method. In this lesson, we are going to compare the previously
+imputed dataset created using `impute_lm()` to the mean imputed dataset.
+Both of these datasets are included in this exercise as
+`ocean_imp_lm_wind` and `ocean_imp_mean` respectively.
+
+``` r
+# Bind the models together 
+bound_models <- bind_rows(mean = ocean_imp_mean,
+                          lm_wind = ocean_imp_lm_wind,
+                          .id = "imp_model")
+
+# Inspect the values of air_temp and humidity as a scatterplot
+ggplot(bound_models, 
+       aes(x = air_temp_c, 
+           y = humidity, 
+           color = any_missing)) +
+  geom_point() + 
+  facet_wrap(~imp_model)
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-65-1.png" style="display: block; margin: auto;" />
+
+## Evaluating imputations (many models & variables)
+
+When you build up an imputation model, it’s a good idea to compare it to
+another method.
+
+In this lesson, we are going to get you to add a final imputation model
+that contains an extra useful piece of information that helps explain
+some of the variation in the data. You are then going to compare the
+values, as previously done in the last lesson.
+
+``` r
+# Build a model adding year to the outcome
+ocean_imp_lm_wind_year <- bind_shadow(oceanbuoys) %>%
+  impute_lm(air_temp_c ~ wind_ew + wind_ns + year) %>%
+  impute_lm(humidity ~ wind_ew + wind_ns + year) %>%
+  add_label_shadow()
+
+# Bind the mean, lm_wind, and lm_wind_year models together
+bound_models <- bind_rows(mean = ocean_imp_mean,
+                          lm_wind = ocean_imp_lm_wind,
+                          lm_wind_year = ocean_imp_lm_wind_year,
+                          .id = "imp_model")
+
+# Explore air_temp and humidity, coloring by any missings, and faceting by imputation model
+ggplot(bound_models, aes(x = air_temp_c, y = humidity, color = any_missing)) + 
+  geom_point() + facet_wrap(~imp_model)
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-66-1.png" style="display: block; margin: auto;" />
+
+``` r
+# Gather the data and inspect the distributions of the values
+bound_models_gather <- bound_models %>%
+  select(air_temp_c, humidity, any_missing, imp_model) %>%
+  gather(key = "key", value = "value", -any_missing, -imp_model)
+
+# Inspect the distribution for each variable, for each model
+ggplot(bound_models_gather, 
+       aes(x = imp_model, y = value, color = imp_model)) +
+  geom_boxplot() + facet_wrap(~key, scales = "free_y")
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-67-1.png" style="display: block; margin: auto;" />
+
+``` r
+
+# Inspect the imputed values
+bound_models_gather %>%
+  filter(any_missing == "Missing") %>%
+  ggplot(aes(x = imp_model, y = value, color = imp_model)) +
+  geom_boxplot() + facet_wrap(~key, scales = "free_y")
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-67-2.png" style="display: block; margin: auto;" />
+
+## Evaluating imputations and models
+
+Our goal is to perform an analysis after imputing data.
+
+1.  Complete case analysis
+2.  Imputation using the imputed data from the last lesson.
+
+<!-- end list -->
+
+``` r
+#1. complete case scinario
+aq_cc <- airquality %>% 
+  na.omit() %>% 
+  bind_shadow() %>% 
+  add_label_shadow()
+
+#2. Imputation using the imputed data from the last lesson
+aq_imp_lm <- bind_shadow(airquality) %>%
+  add_label_shadow() %>%
+  impute_lm(Ozone ~ Temp + Wind + Month + Day) %>%
+  impute_lm(Solar.R ~ Temp + Wind + Month + Day)
+
+ # 3. Bind the models together
+bound_models <- bind_rows(cc = aq_cc,
+                          imp_lm = aq_imp_lm,
+                          .id = "imp_model")
+```
+
+After preparing the models, we fit a linear model separately.
+
+``` r
+
+model_summary <- bound_models %>% 
+  group_by(imp_model) %>%
+  nest() %>%
+  mutate(mod = map(data, 
+                   ~lm(Temp ~ Ozone + Solar.R + Wind + Temp + Day + Month, data = .)),
+         res = map(mod, residuals),
+         pred = map(mod, predict),
+         tidy = map(mod, broom::tidy))
+
+model_summary
+## # A tibble: 2 x 6
+##   imp_model data              mod      res        pred      tidy          
+##   <chr>     <list>            <list>   <list>     <list>    <list>        
+## 1 cc        <tibble [111 x 1~ <S3: lm> <dbl [111~ <dbl [11~ <tibble [6 x ~
+## 2 imp_lm    <tibble [153 x 1~ <S3: lm> <dbl [153~ <dbl [15~ <tibble [6 x ~
+```
+
+``` r
+model_summary %>% 
+  select(imp_model,
+         pred) %>%
+  unnest() %>%
+  ggplot(aes(x = pred,
+             fill = imp_model)) +
+  geom_histogram(position = "dodge")
+```
+
+<img src="Dealing_with_missing_data_files/figure-gfm/unnamed-chunk-70-1.png" style="display: block; margin: auto;" />
+
+## Combining and comparing many imputation models
+
+To evaluate the different imputation methods, we need to put them into a
+single dataframe. Next, you will compare three different approaches to
+handling missing data using the dataset, oceanbuoys.
+
+The first method is using only the completed cases and is loaded as
+ocean\_cc. The second method is imputing values using a linear model
+with predictions made using wind and is loaded as ocean\_imp\_lm\_wind.
+You will create the third imputed dataset, ocean\_imp\_lm\_all, using a
+linear model and impute the variables `sea_temp_c`, `air_temp_c`, and
+`humidity` using the variables `wind_ew`, `wind_ns`, `year`, `latitude`,
+`longitude`.
+
+You will then bind all of the datasets together (`ocean_cc`,
+`ocean_imp_lm_wind`, and `ocean_imp_lm_all`), calling it `bound_models`.
+
+``` r
+
+# Create an imputed dataset using a linear models
+ocean_imp_lm_all <- bind_shadow(oceanbuoys) %>%
+  add_label_shadow() %>%
+  impute_lm(sea_temp_c ~ wind_ew + wind_ns + year + latitude + longitude) %>%
+  impute_lm(air_temp_c ~ wind_ew + wind_ns + year + latitude + longitude) %>%
+  impute_lm(humidity ~ wind_ew + wind_ns + year + latitude + longitude)
+
+# Bind the datasets
+bound_models <- bind_rows(mean = ocean_imp_mean,
+                          imp_lm_wind = ocean_imp_lm_wind,
+                          imp_lm_all = ocean_imp_lm_all,
+                          .id = "imp_model")
+# Look at the models
+bound_models
+## # A tibble: 2,208 x 18
+##    imp_model  year latitude longitude sea_temp_c air_temp_c humidity
+##    <chr>     <dbl>    <dbl>     <dbl>      <dbl>      <dbl>    <dbl>
+##  1 mean       1997        0      -110       27.6       27.1     79.6
+##  2 mean       1997        0      -110       27.5       27.0     75.8
+##  3 mean       1997        0      -110       27.6       27       76.5
+##  4 mean       1997        0      -110       27.6       26.9     76.2
+##  5 mean       1997        0      -110       27.6       26.8     76.4
+##  6 mean       1997        0      -110       27.8       26.9     76.7
+##  7 mean       1997        0      -110       28.0       27.0     76.5
+##  8 mean       1997        0      -110       28.0       27.1     78.3
+##  9 mean       1997        0      -110       28.0       27.2     78.6
+## 10 mean       1997        0      -110       28.0       27.2     76.9
+## # ... with 2,198 more rows, and 11 more variables: wind_ew <dbl>,
+## #   wind_ns <dbl>, year_NA <fct>, latitude_NA <fct>, longitude_NA <fct>,
+## #   sea_temp_c_NA <fct>, air_temp_c_NA <fct>, humidity_NA <fct>,
+## #   wind_ew_NA <fct>, wind_ns_NA <fct>, any_missing <chr>
+```
+
+## Evaluating the different parameters in the model
+
+We are imputing our data for a reason - we want to analyze the data\!
+
+In this example, we are interested in predicting sea temperature, so we
+will build a linear model predicting sea temperature.
+
+We will fit this model to each of the datasets we created and then
+explore the coefficients in the data.
+
+The objects from the previous lesson (`ocean_cc`, `ocean_imp_lm_wind`,
+`ocean_imp_lm_all`, and `bound_models`) are loaded into the workspace.
+
+``` r
+# Create the model summary for each dataset
+model_summary <- bound_models %>% 
+  group_by(imp_model) %>%
+  nest() %>%
+  mutate(mod = map(data, ~lm(sea_temp_c ~ air_temp_c + humidity + year, data = .)),
+         res = map(mod, residuals),
+         pred = map(mod, predict),
+         tidy = map(mod, broom::tidy))
+
+# Explore the coefficients in the model
+model_summary %>% 
+    select(imp_model,tidy) %>%
+    unnest()
+## # A tibble: 12 x 6
+##    imp_model   term          estimate std.error statistic   p.value
+##    <chr>       <chr>            <dbl>     <dbl>     <dbl>     <dbl>
+##  1 mean        (Intercept) -1589.      56.7        -28.0  6.84e-118
+##  2 mean        air_temp_c      0.441    0.0285      15.5  5.33e- 47
+##  3 mean        humidity        0.0161   0.00675      2.39 1.71e-  2
+##  4 mean        year            0.803    0.0286      28.1  3.51e-118
+##  5 imp_lm_wind (Intercept) -1742.      56.1        -31.0  1.83e-135
+##  6 imp_lm_wind air_temp_c      0.365    0.0279      13.1  2.73e- 35
+##  7 imp_lm_wind humidity        0.0225   0.00690      3.26 1.17e-  3
+##  8 imp_lm_wind year            0.880    0.0283      31.1  6.79e-136
+##  9 imp_lm_all  (Intercept)  -697.      51.8        -13.5  5.04e- 37
+## 10 imp_lm_all  air_temp_c      0.890    0.0255      35.0  2.90e-158
+## 11 imp_lm_all  humidity        0.0127   0.00463      2.75 6.03e-  3
+## 12 imp_lm_all  year            0.351    0.0262      13.4  1.12e- 36
+best_model <- "imp_lm_all"
+```
