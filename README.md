@@ -18,3 +18,6 @@ https://www.datacamp.com/courses/machine-learning-in-the-tidyverse
 This tutorail was reviewd on April, 2019, offered by DataCamp.  
 This totorial covers NA value visualization and imputation by `naniar` and `simputation` packages.  
 https://www.datacamp.com/courses/dealing-with-missing-data-in-r
+
+- `naniar`: http://naniar.njtierney.com/  
+- `visdat`: http://visdat.njtierney.com/  
