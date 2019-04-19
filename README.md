@@ -24,3 +24,8 @@ https://www.datacamp.com/courses/dealing-with-missing-data-in-r
 - `mice`: https://cran.r-project.org/package=mice
 - `Flexible imputation of missing data`: https://www.jstatsoft.org/article/view/v085b04/v85b04.pdf
 
+### Unsupervised learning
+
+- Kmeans clustering: `kmeans` from `stats`
+- Hierachical clustering: `hclust` from `stats`
+
