@@ -3,10 +3,11 @@
 This can become legacy archive. Update pending.
 
 
-|**Course**  | **Date**                         | **Explanation**                              |
-| :---------------| :-------------------------- | :------------------------------------------- |
-| ML in tidyverse | 2019 March                  |  Nest/Unnest by list-column, `broom` usage   |
-| Dealing with NA | 2019 April                  |  NA visualization/imputation by `naniar`     |
+|**Course**             | **Date**                         | **Explanation**                              |
+| :---------------------| :-------------------------- | :------------------------------------------- |
+| ML in tidyverse       | 2019 March                  |  Nest/Unnest by list-column, `broom` usage   |
+| Dealing with NA       | 2019 April                  |  NA visualization/imputation by `naniar`     |
+| Unsupervised Learning | 2019 April                  |  NA visualization/imputation by `naniar`     |
 
 
 ###  ML in Tidyverse   
