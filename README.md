@@ -28,5 +28,8 @@ https://www.datacamp.com/courses/dealing-with-missing-data-in-r
 ### Unsupervised learning
 
 - Kmeans clustering: `kmeans` from `stats`
-- Hierachical clustering: `hclust` from `stats`
+- Hierachical clustering: `hclust` from `stats`  
+- PCA: `prcomp` from `stats`
+
+
 
