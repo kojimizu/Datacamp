@@ -1,0 +1,514 @@
+---
+title: "Introduction to time series analysis"
+author: "Koji Mizumura"
+date: ""
+output: 
+ html_document:
+  number_sections: yes
+  section_divs: yes
+  theme: readable
+  toc: yes
+  toc_depth: 4
+  toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(magrittr)
+library(forecast)
+library(fpp2)
+```
+
+
+# Introduction
+
+- Time series: a sequence of data in chronological order
+- data in comonly recored seqnuentially, over time
+- time series data is everywhere(e.g., CPI).
+- Time series data is dated or time stampled in R
+
+We will learn basic time series models
+
+- white noise (WN)
+- Random walk (RW) 
+- Autoregression (AR)
+- simple moving average (MA)
+
+## Explore raw time series
+
+The most common first step when conducting time series analysis is to display your time series dataset in a visually intuitive format. The most useful way to view raw time series data in R is to use the `print()` command, which displays the Start, End, and Frequency of your data along with the observations.
+
+Another useful command for viewing time series data in R is the `length()` function, which tells you the total number of observations in your data.
+
+Some datasets are very long, and previewing a subset of data is more suitable than displaying the entire series. The `head(___, n =___)` and `tail(___, n =___)` functions, in which `n` is the number of items to display, focus on the first and last few elements of a given dataset respectively.
+
+In this exercise, you'll explore the famous River `Nile` annual streamflow data, Nile. This time series dataset includes some metadata information. When calling print(Nile), note that `Start = 1871` indicates that 1871 is the year of the first annual observation, and `End = 1970` indicates 1970 is the year of the last annual observation.
+
+```{r}
+# Print the Nile dataset
+print(Nile)
+
+# List the number of observations in the Nile dataset
+length(Nile)
+
+# Display the first 10 elements of the Nile dataset
+head(Nile,10)
+
+# Display the last 12 elements of the Nile dataset
+tail(Nile,12)
+```
+
+## Basic time series
+
+While simple commands such as print(), length(), head(), and tail() provide crucial information about your time series data, another very useful way to explore any data is to generate a plot.
+
+In this exercise, you will plot the River Nile annual streamflow data using the plot() function. For time series data objects such as Nile, a Time index for the horizontal axis is typically included. From the previous exercise, you know that this data spans from 1871 to 1970, and horizontal tick marks are labeled as such. The default label of "Time" is not very informative. Since these data are annual measurements, you should use the label "Year". While you're at it, you should change the vertical axis label to "River Volume (1e9 m^{3})".
+
+Additionally, it helps to have an informative title, which can be set using the argument main. For your purposes, a useful title for this figure would be "Annual River Nile Volume at Aswan, 1871-1970".
+
+Finally, the default plotting `type` for time series objects is "`l"` for line. Connecting consecutive observations can help make a time series plot more interpretable. Sometimes it is also useful to include both the observations points as well as the lines, and we instead use `"b"` for both.
+
+```{r}
+# Plot the Nile data
+plot(Nile)
+
+# Plot the Nile data with xlab and ylab arguments
+plot(Nile, xlab = "Year", ylab = "River Volume (1e9 m^{3})")
+
+# Plot the Nile data with xlab, ylab, main, and type arguments
+plot(Nile, xlab = "Year", ylab = "River Volume (1e9 m^{3})",main = "Annual River Nile Volume at Aswan, 1871-1970", type ="b")
+```
+## What does the time index tell us?
+
+Some data are naturally evenly spaced by time. The time series `discrete_data` shown in the top figure has 20 observations, with one observation appearing at each of the discrete time indices 1 through 20. Discrete time indexing is appropriate for `discrete_data`.
+
+The time series `continuous_series` shown in the bottom figure also has 20 observations, it is following the same periodic pattern as `discrete_data`, but its observations are not evenly spaced. Its first, second, and last observations were observed at times 1.210322, 1.746137, and 20.180524, respectively. Continuous time indexing is natural for continuous_series, however, the observations are approximately evenly spaced, with about 1 observation observed per time unit. Let's investigate using a discrete time indexing for `continuous_series`.
+
+```{r}
+# Plot the continuous_series using continuous time indexing
+# par(mfrow=c(2,1))
+# plot(continuous_time_index,continuous_series, type = "b")
+
+# Make a discrete time index using 1:20 
+discrete_time_index <-1:100
+
+# Now plot the continuous_series using discrete time indexing
+plot(discrete_time_index,Nile, type = "b")
+```
+
+## sampling frequency
+
+- Some time series data is only approximiately evenly spaced
+- evenly spaced, but with missing values
+
+Assumptions for time series are:
+
+1. consecutive observations are equally spaced.
+2. Apply a discrete-time observation index
+3. This may only hold approximately
+
+we can apply `start()`, `end()`, `frequency()`, `deltat()`. 
+
+## Identifying sampling frequency
+
+```{r}
+# Plot AirPassengers
+plot(AirPassengers)
+
+# View the start and end dates of AirPassengers
+start(AirPassengers)
+end(AirPassengers)
+
+# Use time(), deltat(), frequency(), and cycle() with AirPassengers 
+time(AirPassengers)
+deltat(AirPassengers)
+frequency(AirPassengers)
+cycle(AirPassengers)
+```
+
+## When is the sampling frequency exact?
+
+The sampling frequency is often only approximate and the interval between observations is not quite a fixed unit. For example, there are usually 365 days in a year based on the Gregorian calendar. However, (almost) every four years there are 366 days (leap years). This compensates for the fact that the Earth completes a rotation around Sol, the sun, in approximately 365.2422 days, on average.
+
+As a simplifying assumption, we often ignore these small discrepancies and proceed as though the sampling frequency and observation intervals are fixed constants. Typically, our results will not be sensitive to approximation when the underlying process is not changing too quickly.
+
+Which one of the following has an exact sampling frequency?
+
+## Missing values
+
+Sometimes there are missing values in time series data, denoted `NA` in R, and it is useful to know their locations. It is also important to know how missing values are handled by various R functions. Sometimes we may want to ignore any missingness, but other times we may wish to impute or estimate the missing values.
+
+Let's again consider the monthly `AirPassengers` dataset, but now the data for the year 1956 are missing. In this exercise, you'll explore the implications of this missing data and impute some new data to solve the problem.
+
+The `mean()` function calculates the sample mean, but it fails in the presence of any NA values. Use `mean(___, na.rm = TRUE)` to calculate the mean with all missing values removed. It is common to replace missing values with the mean of the observed values. Does this simple data imputation scheme appear adequate when applied the the AirPassengers dataset?
+
+```{r}
+# Plot the AirPassengers data
+plot(AirPassengers)
+
+# Compute the mean of AirPassengers
+mean(AirPassengers, na.rm=TRUE)
+
+# Impute mean values to NA in AirPassengers
+AirPassengers[85:96] <- mean(AirPassengers, na.rm = TRUE)
+
+# Generate another plot of AirPassengers
+plot(AirPassengers)
+
+
+# Add the complete AirPassengers data to your plot
+rm(AirPassengers)
+points(AirPassengers, type = "l", col = 2, lty = 3)
+```
+
+## Basic time series objects
+
+`ts` objects
+
+- start with a vector of data
+- apply the `ts()` function
+
+```{r}
+library(magrittr)
+
+data_vector <- list(10,6,11,8,10,3,6,9)
+data_vector <- data_vector %>% 
+  as.vector() %>% 
+  unlist()
+
+data_vector
+
+data_vector %>% 
+  ts() %>% 
+  plot()
+```
+
+- specify the start date and observation frequency
+
+```{r}
+time_series <- ts(data_vector, start = 2001, frequency = 1)
+plot(time_series)
+```
+
+we have another function `is.ts()`. The function checks whether an object is of the `ts()` class:
+
+```{r}
+is.ts(data_vector)
+is.ts(time_series)
+```
+
+Why `ts()` object? The reason is 1) improve plotting, 2) access to time index information and 3) model estimation and forecasting (laster chapters).
+
+## Creating a time series object with `ts()`
+
+The function `ts()` can be applied to create time series objects. A time series object is a vector (univariate) or matrix (multivariate) with additional attributes, including time indices for each observation, the sampling frequency and time increment between observations, and the cycle length for periodic data. Such objects are of the `ts` class, and represent data that has been observed at (approximately) equally spaced time points. Now you will create time series objects yourself.
+
+The advantage of creating and working with time series objects of the `ts` class is that many methods are available for utilizing time series attributes, such as time index information. For example, as you've seen in earlier exercises, calling `plot()` on a `ts` object will automatically generate a plot over time.
+
+In this exercise, you'll familiarize yourself with the ts class by encoding some time series data (saved as `data_vector`) into ts and exploring the result. Your time series `data_vector` starts in the year 2004 and has 4 observations per year (i.e. it is quarterly data).
+
+```{r}
+# Use print() and plot() to view data_vector
+print(data_vector)
+plot(data_vector)
+
+# Convert data_vector to a ts object with start = 2004 and frequency = 4
+time_series <- ts(data_vector, start = 2004, frequency=4)
+
+# Use print() and plot() to view time_series
+print(time_series)
+plot(time_series)
+```
+
+## Testing whether an object is a time series
+When you work to create your own datasets, you can build them as `ts` objects. Recall the dataset data_vector from the previous exercise, which was just a vector of numbers, and time_series, the `ts` object you created from data_vector using the `ts()` function and information regarding the start time and the observation frequency. As a reminder, data_vector and time_series are shown in the plot on the right.
+
+When you use datasets from others, such as those included in an R package, you can check whether they are ts objects using the `is.ts()` command. The result of the test is either TRUE when the data is of the `ts` class, or FALSE if it is not.
+
+In this exercise, you'll explore the class of the datasets you've been using throughout this chapter.
+
+```{r}
+# Check whether data_vector and time_series are ts objects
+is.ts(data_vector)
+is.ts(time_series)
+
+
+# Check whether Nile is a ts object
+is.ts(Nile)
+
+# Check whether AirPassengers is a ts object
+is.ts(AirPassengers)
+```
+
+## Plotting a time series object
+It is often very useful to plot data we are analyzing, as is the case when conducting time series analysis. If the dataset under study is of the ts class, then the `plot()` function has methods that automatically incorporate time index information into a figure.
+
+Let's consider the eu_stocks dataset (available in R by default as EuStockMarkets). This dataset contains daily closing prices of major European stock indices from 1991-1998, specifically, from Germany (`DAX`), Switzerland (`SMI`), France (`CAC`), and the UK (`FTSE`). The data were observed when the markets were open, so there are no observations on weekends and holidays. We will proceed with the approximation that this dataset has evenly spaced observations and is a four dimensional time series.
+
+To conclude this chapter, this exercise asks you to apply several of the functions you've already learned to this new dataset.
+
+```{r}
+# Check whether eu_stocks is a ts object
+is.ts(uschange)
+
+# View the start, end, and frequency of eu_stocks
+start(uschange)
+end(uschange)
+frequency(uschange)
+
+# Generate a simple plot of eu_stocks
+plot(uschange)
+
+# Use ts.plot with eu_stocks
+ts.plot(uschange, col = 1:4, xlab = "Year", ylab = "Index Value", main = "Major European Stock Indices, 1991-1998")
+
+# Add a legend to your ts.plot
+legend("topleft", colnames(uschange), lty = 1, col = 1:4, bty = "n")
+
+## OR 
+uschange %>% 
+  autoplot()
+
+uschange %>% 
+  autoplot(facets=TRUE)
+
+```
+
+# Predicting the future 
+## Trend spotting!
+
+Some time series do not exhibit any clear trends over time:
+
+- linear trend
+- rapid growth (non-linear trend)
+- periodic trend 
+- increasing variance trends
+
+sample transfomations are: 
+
+- `log()` - linearize a rapid growth trend
+- `diff()` - remove a linear trend
+- `diff()..., s`: seasonal difference transformation remove periodic trend
+
+## Removing trends in variability via the logarithmic transformation
+The logarithmic function `log()` is a data transformation that can be applied to positively valued time series data. It slightly shrinks observations that are greater than one towards zero, while greatly shrinking very large observations. This property can stabilize variability when a series exhibits increasing variability over time. It may also be used to linearize a rapid growth pattern over time.
+
+The time series rapid_growth has already been loaded, and is shown in the figure on the right. Note the vertical range of the data.
+
+```{r}
+fpp2::a10 %>% autoplot()
+
+# Log rapid_growth
+linear_growth <-log(a10)
+  
+# Plot linear_growth using ts.plot()
+ ts.plot(linear_growth)
+```
+
+## Removing trends in level by differencing
+The first difference transformation of a time series z[t] consists of the differences (changes) between successive observations over time, that is z[t]−z[t−1].
+
+Differencing a time series can remove a time trend. The function diff() will calculate the first difference or change series. A difference series lets you examine the increments or changes in a given time series. It always has one fewer observations than the original series.
+
+The time series z has already been loaded, and is shown in the figure on the right.
+
+```{r}
+# Generate the first difference of z
+z <- fpp2::a10
+dz <- diff(z)
+  
+# Plot dz
+ts.plot(dz)
+
+# View the length of z and dz, respectively
+length(z)
+length(dz)
+```
+
+## Removing seasonal trends with seasonal differencing
+
+For time series exhibiting seasonal trends, seasonal differencing can be applied to remove these periodic patterns. For example, monthly data may exhibit a strong twelve month pattern. In such situations, changes in behavior from year to year may be of more interest than changes from month to month, which may largely follow the overall seasonal pattern.
+
+The function `diff(..., lag = s)` will calculate the lag s difference or length `s` seasonal change series. For monthly or quarterly data, an appropriate value of `s` would be 12 or 4, respectively. The `diff()` function has `lag = 1` as its default for first differencing. Similar to before, a seasonally differenced series will have `s` fewer observations than the original series.
+
+```{r}
+# Generate a diff of x with lag = 4. Save this to dx
+x <- fpp2::a10
+dx <- diff(x, lag=4)
+  
+# Plot dx
+ts.plot(dx)
+
+# View the length of x and dx, respectively
+length(x)
+length(dx)
+```
+
+## The White noise(WN) model
+
+WN is the simplest example of statonary process.
+
+A weak white noise process has:
+- A fixed, constant mean,
+- A fixed, constant variance,
+- No correlation over time
+
+```{r}
+# simulate n=50 observations from the WN model
+WN_1 <- arima.sim(model = list(order = c(0,0,0)), n=50)
+ts.plot(WN_1)
+
+WN_2 <- arima.sim(model = list(order = c(0,0,0)), n=50,
+                  mean = 4,
+                  sd=2)
+ts.plot(WN_2)
+```
+
+Finally, we can use WN model for the estimation.
+
+```{r}
+# fit the WN model with arima()
+arima(WN_2, order=c(0,0,0))
+
+# calculate sample  mean and variance   
+mean (WN_2)
+var(WN_2)
+```
+
+## Simulate the white noise model
+
+The white noise (WN) model is a basic time series model. It is also a basis for the more elaborate models we will consider. We will focus on the simplest form of WN, independent and identically distributed data.
+
+The `arima.sim()` function can be used to simulate data from a variety of time series models. ARIMA is an abbreviation for the autoregressive integrated moving average class of models we will consider throughout this course.
+
+An __ARIMA(p, d, q)__ model has three parts, the autoregressive order `p`, the order of integration (or differencing) `d`, and the moving average order `q`. We will detail each of these parts soon, but for now we note that the ARIMA(0, 0, 0) model, i.e., with all of these components zero, is simply the WN model.
+
+In this exercise, you will practice simulating a basic WN model.
+
+```{r}
+# Simulate a WN model with list(order = c(0, 0, 0))
+
+white_noise <- arima.sim(model = list(order=c(0,0,0)),n = 100)
+
+# Plot your white_noise data
+ts.plot(white_noise)
+
+# Simulate from the WN model with: mean = 100, sd = 10
+white_noise_2 <- arima.sim(model = list(order=c(0,0,0)), n = 100, mean = 100, sd = 10)
+
+# Plot your white_noise_2 data
+ts.plot(white_noise_2)
+
+```
+
+## Estimate the white noise model
+For a given time series `y` we can fit the white noise (WN) model using the `arima(..., order = c(0, 0, 0))` function. Recall that the WN model is an ARIMA(0,0,0) model. Applying the `arima()` function returns information or output about the estimated model. For the WN model this includes the estimated mean, labeled `intercept`, and the estimated variance, labeled `sigma^2`.
+
+In this exercise, you'll explore the qualities of the WN model. What is the estimated mean? Compare this with the sample mean using the mean() function. What is the estimated variance? Compare this with the sample variance using the `var()` function.
+
+The time series y has already been loaded, and is shown in the adjoining figure.
+
+```{r}
+
+y <- white_noise
+# Fit the WN model to y using the arima command
+arima(y, order=c(0,0,0))
+
+
+# Calculate the sample mean and sample variance of y
+mean(y)
+var(y)
+```
+
+## The Random Walk(RW) Model
+
+Random Walk(RW) is a simple example of a non-stationary process. 
+
+A random walk has:
+
+- no specified mean or variance
+- strong dependence over time
+- its changes or increments are WN
+
+The random walk recusion
+
+$$
+Today = Yesterday \   + \ Noise \\
+Y_t = Y_{t-1} \ + \ \epsilon_t
+$$
+
+where $\epsilon_t$ is mean zero white noise (WN). 
+
+- Simulation requires an initial point
+- only one parameter, the WN variance $\sigma_{\epsilon}^2$
+
+In the random walk process, $\epsilon$ is mean zero WN. As $Y_t - Y_{t-1} = \epsilon_t$, __diff(Y) is WN__.
+
+Random wolk with adrift
+$$
+Y_t = c + Y_{t-1}+\epsilon_t
+$$
+
+where $\epsilon$ is mean zero white noise (WN). 
+
+- Two parameters, constant $c$ and WN variance $\sigma_{\epsilon}^2$. 
+- $Y_t-Y_{t-1}=?$, it becomes WN with mean c !
+
+Random walk with drift - II
+
+## Simulate the random walk model
+
+The random walk (RW) model is also a basic time series model. It is the cumulative sum (or integration) of a mean zero white noise (WN) series, such that the first difference series of a RW is a WN series. Note for reference that the RW model is an __ARIMA(0, 1, 0)__ model, in which the middle entry of 1 indicates that the model's order of integration is 1.
+
+The `arima.sim()` function can be used to simulate data from the RW by including the `model = list(order = c(0, 1, 0))` argument. We also need to specify a series length `n`. Finally, you can specify a `sd` for the series (increments), where the default value is 1.
+
+```{r}
+# Generate a RW model using arima.sim
+random_walk <- arima.sim(model = list(order = c(0,1,0)), n = 100)
+
+# Plot random_walk
+ts.plot(random_walk)
+
+# Calculate the first difference series
+random_walk_diff <- diff(random_walk)
+
+# Plot random_walk_diff
+ts.plot(random_walk_diff)
+  
+```
+
+## Simulate the random walk model with a drift
+
+A random walk (RW) need not wander about zero, it can have an upward or downward trajectory, i.e., a drift or time trend. This is done by including an intercept in the RW model, which corresponds to the slope of the RW time trend.
+
+For an alternative formulation, you can take the cumulative sum of a constant mean white noise (WN) series, such that the mean corresponds to the slope of the RW time trend.
+
+To simulate data from the RW model with a drift you again use the `arima.sim()` function with the `model = list(order = c(0, 1, 0))` argument. This time, you should add the additional argument `mean = ...` to specify the drift variable, or the intercept.
+
+```{r}
+# Generate a RW model with a drift uing arima.sim
+rw_drift <- arima.sim(model = list(order = c(0,1,0)), n = 100, mean = 1)
+
+# Plot rw_drift
+ts.plot(rw_drift)
+
+# Calculate the first difference series
+rw_drift_diff <- diff(rw_drift)
+
+# Plot rw_drift_diff
+ts.plot(rw_drift_diff)
+```
+
+## Estimate the random walk model
+
+For a given time series y we can fit the random walk model with a drift by first differencing the data, then fitting the white noise (WN) model to the differenced data using the `arima()` command with the order = c(0, 0, 0)) argument.
+
+The `arima()` command displays information or output about the fitted model. Under the Coefficients: heading is the estimated drift variable, named the intercept. Its approximate standard error (or s.e.) is provided directly below it. The variance of the WN part of the model is also estimated under the label `sigma^2`.
+
+
+
+
