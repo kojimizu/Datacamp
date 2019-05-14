@@ -509,6 +509,149 @@ For a given time series y we can fit the random walk model with a drift by first
 
 The `arima()` command displays information or output about the fitted model. Under the Coefficients: heading is the estimated drift variable, named the intercept. Its approximate standard error (or s.e.) is provided directly below it. The variance of the WN part of the model is also estimated under the label `sigma^2`.
 
+```{r}
+# Difference your random_walk data
+library(magrittr)
+random_walk %>% ts.plot()
+rw_diff <- diff(random_walk)
 
+# Plot rw_diff
+ts.plot(rw_diff)
+
+# Now fit the WN model to the differenced data
+model_wn <- arima(rw_diff, order=c(0,0,0))
+
+# Store the value of the estimated time trend (intercept)
+int_wn <- model_wn$coef
+
+# Plot the original random_walk data
+ts.plot(random_walk)
+
+# Use abline(0, ...) to add time trend to the figure
+abline(0, int_wn)
+
+```
+
+## Sttionary process
+
+- Stationary models are parsimonious
+- Stationary process have distributional stability over time
+
+Observed time series
+- Fluctuate randomly
+- But behave similar from one time period to the next
+
+__Weak stationarity - I:__ 
+mean, variance, covariance constant over time.
+
+E.g., $Y_1, Y_2,...$ is weakly stationary process if: 
+
+- mean $\mu$ of $Y_t$ is same (constant) for all $t$
+- Variance $\sigma^2$ of $Y_t$ is same (constant) for all $t$
+- And ...
+
+__Weak stationarity - II__
+- Covariance of $Y_t$ and $Y_s$ is same (constant) for alll $|t-s|=h$, for all $h$. For example, if the process is weakl stationary, 
+
+$$
+Cov(Y_2, Y_5) = Cov(Y_7, Y_10) 
+$$
+
+since each pair is separated by three units of time.
+
+A stationary process can be modeled with fewer parameters. For example, we do not need a different expectation for each $Y_t$; rather they all have a common expectation, $mu$.
+
+- Estimate $\mu$ accurately by $\bar{y}$. 
+
+To detect stationarity, 
+
+Many financial time series do not exhibit stationarity, however
+
+- The __changes__ in the series are often approximately stationary
+- A stationary series should show random iscillation around some fixed level; a phenomenon called __mean-reversion__
+
+## Are the white noise model or the random walk model stationary?
+
+The white noise (WN) and random walk (RW) models are very closely related. However, only the RW is always non-stationary, both with and without a drift term. This is a simulation exercise to highlight the differences.
+
+Recall that if we start with a mean zero WN process and compute its running or cumulative sum, the result is a RW process. The `cumsum()` function will make this transformation for you. Similarly, if we create a WN process, but change its mean from zero, and then compute its cumulative sum, the result is a RW process with a drift.
+
+```{r}
+# Use arima.sim() to generate WN data
+white_noise <- arima.sim(model = list(order=c(0,0,0)), n=100)
+
+# Use cumsum() to convert your WN data to RW
+random_walk <- cumsum(white_noise)
+  
+# Use arima.sim() to generate WN drift data
+wn_drift <- arima.sim(model=list(c(0,0,0)), mean=0.4, n=100)
+  
+# Use cumsum() to convert your WN drift data to RW
+rw_drift <- cumsum(wn_drift)
+
+# Plot all four data objects
+plot.ts(cbind(white_noise, random_walk, wn_drift, rw_drift))
+
+```
+
+# Correlation analysis and the autocorrelation function
+
+In this chapter, you will review the correlation coefficient, use it to compare two time series, and also apply it to compare a time series with its past, as an autocorrelation. You will discover the autocorrelation function (ACF) and practice estimating and visualizing autocorrelations for time series data.
+
+## Scatterplots
+
+Stock PRices: Stock A and B over time
+
+```{r eval=FALSE}
+ts.plot(cbind(stock_A, stock_B))
+```
+
+```{r eval=FALSE}
+plot(stock_A, stock_B)
+```
+
+When we want to check the log returns
+```{r eval=FALSE}
+
+stock_A_logreturn = diff(log(stock_A))
+stock_B_logreturn = diff(log(stock_B))
+ts.plot(cbind(stock_A_logreturn, stock_B_logreturn))
+```
+
+
+## Asset prices vs asset returns
+
+The goal of investing is to make a profit. The revenue or loss from investing depends on the amount invested and changes in prices, and high revenue relative to the size of an investment is of central interest. This is what financial asset returns measure, changes in price as a fraction of the initial price over a given time horizon, for example, one business day.
+
+Let's again consider the `eu_stocks` dataset. This dataset reports index values, which we can regard as prices. The indices are not investable assets themselves, but there are many investable financial assets that closely track major market indices, including mutual funds and exchange traded funds.
+
+Log returns, also called continuously compounded returns, are also commonly used in financial time series analysis. They are the log of gross returns, or equivalently, the changes (or first differences) in the logarithm of prices.
+
+The change in appearance between daily prices and daily returns is typically substantial, while the difference between daily returns and log returns is usually small. As you'll see later, one advantage of using log returns is that calculating multi-period returns from individual periods is greatly simplified - you just add them together!
+
+In this exercise, you'll further explore the `eu_stocks` dataset, including plotting prices, converting prices to (net) returns, and converting prices to log returns.
+
+```{r}
+EuStockMarkets_tibble <- 
+  EuStockMarkets %>% 
+  as.tibble() %>% 
+  mutate(time = 1:as.integer(count(as.tibble(EuStockMarkets))))
+  
+EuStockMarkets_tibble %>% 
+  ggplot(aes(time,DAX))+
+  geom_line()+
+  hrbrthemes::theme_ipsum_ps()
+
+EuStockMarkets %>% 
+  ts.plot()
+```
+
+
+## Characteristics of financial time series
+## Plotting paris of data
+## Covariance and correlation
+## Calculating sample covariances and correlations
+## Guess the correlation coefficient
+## Autocorrelation
 
 
