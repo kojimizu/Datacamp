@@ -8,6 +8,7 @@ This can become legacy archive. Update pending.
 | ML in tidyverse       | 2019 March                  |  Nest/Unnest by list-column, `broom` usage   |[Here](https://github.com/kojimizu/Datacamp/blob/master/ML%20in%20Tidyverse/ML_in_Tidyverse.md)          |
 | Dealing with NA       | 2019 April                  |  NA visualization/imputation by `naniar`     |[Here](https://github.com/kojimizu/Datacamp/blob/master/Missing%20data%20(DC)/Dealing_with_missing_data.md)         |
 | Unsupervised Learning | 2019 April                  |  K-means, Hierachical clustering             |[Here](https://github.com/kojimizu/Datacamp/blob/master/Unsupervised%20Learning/Unsupervised_learning.md)          |
+| Time Series | 2019 May                  |  Time series analysis Basics             |[Here]()          |
 
 
 ###  ML in Tidyverse   
