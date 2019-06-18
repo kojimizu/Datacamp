@@ -35,12 +35,12 @@ https://www.datacamp.com/courses/dealing-with-missing-data-in-r
 
 
 ### Time series analysis
-- AR and MA models and time series visualization
-https://www.datacamp.com/courses/introduction-to-time-series-analysis
+- AR and MA models and time series visualization  
+https://www.datacamp.com/courses/introduction-to-time-series-analysis  
 
 ### ARIMA modeling
-- ARMA and ARIMA modeling by `astsa` package. 
-https://www.datacamp.com/courses/arima-modeling-with-r
+- ARMA and ARIMA modeling by `astsa` package.   
+https://www.datacamp.com/courses/arima-modeling-with-r  
 
 
 
