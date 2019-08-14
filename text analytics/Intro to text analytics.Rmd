@@ -1,0 +1,807 @@
+---
+title: "Text mining"
+author: "Koji Mizumura"
+date: "`r Sys.Date()`"
+output: 
+  rmdformats::readthedown:
+    number_sections: yes
+    fig_height: 10
+    fig_width: 14
+    highlight: kate
+    toc_depth: 3
+    css: style.css
+  html_document:
+    number_sections: yes
+    section_divs: yes
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.align = "center",
+  # fig.height = 4.5,
+  error = FALSE,
+  message = FALSE, 
+  warning = FALSE, 
+  collapse = TRUE,
+  cache = TRUE
+)
+```
+
+```{r}
+library(tidyverse)
+library(tidytext)
+```
+
+
+# String manipulation by `stringr`
+## Stingr Basics
+
+When to use " vs '.
+
+- `"`: No quotes in the string, use double quotes 
+- `'`: Double quotes in the string, use single quotes
+- `"`: Doubles and sigle quotes in the string, use double quotes.
+
+```{r }
+"hi!"
+'I said "hi"'
+" I'd say \"hi!\""
+```
+
+### Quotes 
+
+Let's get started by entering some strings in R. In the video you saw that you use quotes to tell R to interpret something as a string. Both double quotes (`"`) and single (`'`) quotes work, but there are some guidelines for which to use.
+
+First, you should prefer double quotes (`"`) to single quotes (`'`). That means, whenever you are defining a string your first intuition should be to use `"`.
+
+Unfortunately if your string has `"` inside it, R will interpret the double quote as "this is the end of the string", not as "this is the character `""`. This is one time you can forget the first guideline 
+
+```{r}
+# Define line1
+line1 <- "The table was a large one, but the three were all crowded together at one corner of it:"
+
+# Define line2
+line2 <- '"No room! No room!" they cried out when they saw Alice coming.' 
+
+# Define line3
+line3 <- "\"There's plenty of room!\" said Alice indignantly, and she sat down in a large arm-chair at one end of the table."
+```
+
+### What you see isn't always what you have
+Take a look at line2, the string you just defined, by printing it:
+
+```{r}
+line2
+```
+
+Even though you used single quotes so you didn't have to escape any double quotes, when R prints it, you'll see escaped double quotes (`\"`)! R doesn't care how you defined the string, it only knows what the string represents, in this case, a string with double quotes inside.
+
+When you ask R for line2 it is actually calling print(line2) and the `print()` method for strings displays strings as you might enter them. If you want to see the string it represents you'll need to use a different function: `writeLines()`.
+
+You can pass `writeLines()` a vector of strings and it will print them to the screen, each on a new line. This is a great way to check the string you entered really does represent the string you wanted.
+
+```{r}
+# Putting lines in a vector
+lines <- c(line1, line2, line3)
+
+# Print lines
+lines
+
+# Use writeLines() on lines
+writeLines(lines)
+
+# Write lines with a space separator
+writeLines(lines, sep=" ")
+
+# Use writeLines() on the string "hello\n\U1F30D"
+writeLines("hello\n\U1F30D")
+```
+
+### Escape sequences
+
+You might have been surprised at the output from the last part of the last exercise. How did you get two lines from one string, and how did you get that little globe? The key is the `\`.
+
+A sequence in a string that starts with a `\` is called an escape sequence and allows us to include special characters in our strings. You saw one escape sequence in the first exercise: `\"` is used to denote a double quote.
+
+In `"hello\n\U1F30D"` there are two escape sequences: `\n` gives a newline, and` \U` followed by up to 8 hex digits sequence denotes a particular Unicode character.
+
+```{r}
+# Should display: To have a \ you need \\
+writeLines("To have a \\ you need \\\\")
+
+# Should display: 
+# This is a really 
+# really really 
+# long string
+writeLines("This is a really really really long string")
+
+# Use writeLines() with 
+# "\u0928\u092e\u0938\u094d\u0924\u0947 \u0926\u0941\u0928\u093f\u092f\u093e"
+writeLines("\u0928\u092e\u0938\u094d\u0924\u0947 \u0926\u0941\u0928\u093f\u092f\u093e")
+```
+
+## Using `format()` with numbers
+
+The behavior of `format()` can be pretty confusing, so you'll spend most of this exercise exploring how it works.
+
+Recall from the video, the scientific argument to `format()` controls whether the numbers are displayed in fixed (`scientific = FALSE`) or scientific (`scientific = TRUE) format`.
+
+When the representation is scientific, the `digits` argument is the number of digits before the exponent. When the representation is fixed, digits controls the significant digits used for the smallest (in magnitude) number. Each other number will be formatted to match the number of decimal places in the smallest number. This means the number of decimal places you get in your output depends on all the values you are formatting!
+
+For example, if the smallest number is 0.0011, and digits = 1, then 0.0011 requires 3 places after the decimal to represent it to 1 significant digit, 0.001. Every other number will be formatted to 3 places after the decimal point.
+
+So, how many decimal places will you get if 1.0011 is the smallest number? You'll find out in this exercise.
+
+
+
+# Text mining - bag of words
+## Jumping into text mining with bag of words
+
+Text mining is the process of distilling actionable insights from text, comprising of six steps.
+
+1. Problem definition & specific goals
+2. Identify text to be collected
+3. Text organization
+4. Feature extraction
+5. Analysis
+6. Research in insight, recommendation or output
+
+Two approaches exist
+
+a) Semantic parsing
+word type and order are considered, and a lot of features need to be considered.How words are borken down - unique atrributes are derived.
+
+b) Bag of words
+It does not care about word type or order. Word attributes in the doment only matters. 
+
+```{r}
+# Load qdap
+library(qdap)
+
+# Print new_text to the console
+new_text <- "DataCamp is the first online learning platform that focuses on building the best learning experience specifically for Data Science. We have offices in Boston and Belgium and to date, we trained over 250,000 (aspiring) data scientists in over 150 countries. These data science enthusiasts completed more than 9 million exercises. You can take free beginner courses, or subscribe for $25/month to get access to all premium courses."
+
+# Find the 10 most frequent terms: term_count
+term_count <- freq_terms(new_text,10)
+
+# Plot term_count
+term_count %>% plot()
+```
+
+### Getting started - Load some text
+
+We build a first corpus (collection of documents). `tm`
+package help us to create a corpus.
+
+Text mining begins with loading some text data into R, which we'll do with the `read.csv()` function. By default, `read.csv()` treats character strings as factor levels like Male/Female. To prevent this from happening, it's very important to use the argument stringsAsFactors = FALSE.
+
+A best practice is to examine the object you read in to make sure you know which column(s) are important. The `str()` function provides an efficient way of doing this.
+
+```{r eval=FALSE}
+# Import text data
+cofee_data_file <- ""
+tweets <- read.csv(coffee_data_file, stringsAsFactors = FALSE)
+
+# View the structure of tweets
+str(tweets)
+
+# Isolate text from tweets: coffee_tweets
+coffee_tweets <- tweets$text
+```
+
+### Make the vector a VCorpus object (1)
+
+Recall that you've loaded your text data as a vector called coffee_tweets in the last exercise. Your next step is to convert this vector containing the text data to a corpus. As you've learned in the video, a corpus is a collection of documents, but it's also important to know that in the tm domain, R recognizes it as a data type.
+
+There are two kinds of the corpus data type, the permanent corpus, PCorpus, and the volatile corpus, VCorpus. In essence, the difference between the two has to do with how the collection of documents is stored in your computer. In this course, we will use the volatile corpus, which is held in your computer's RAM rather than saved to disk, just to be more memory efficient.
+
+To make a volatile corpus, R needs to interpret each element in our vector of text, `coffee_tweets`, as a document. And the tm package provides what are called Source functions to do just that! In this exercise, we'll use a Source function called `VectorSource()` because our text data is contained in a vector. The output of this function is called a Source object. Give it a shot!
+
+```{r eval=FALSE}
+# Load tm
+library(tm)
+
+# Make a vector source: coffee_source
+coffee_source <- VectorSource(coffee_tweets)
+```
+
+### Make the vector a VCorpus object (2)
+
+Now that we've converted our vector to a Source object, we pass it to another `tm` function, `VCorpus()`, to create our volatile corpus. Pretty straightforward, right?
+
+The `VCorpus` object is a nested list, or list of lists. At each index of the `VCorpus` object, there is a `PlainTextDocument` object, which is a list containing actual text data (`content`), and some corresponding metadata (meta). It can help to visualize a VCorpus object to conceptualize the whole thing.
+
+To review a single document object (the 10th) you subset with double square brackets.
+
+```{r eval=FALSE}
+cofee_corpus[[10]]
+```
+
+
+To review the actual text you index the list twice. To access the document's metadata, like timestamp, change `[1] `to `[2]`. Another way to review the plain text is with the `content()` function which doesn't need the second set of brackets.
+
+```{r}
+ch_1_twitter_data <- readRDS("data/ch_1_twitter_data.rds")
+
+tidy_twitter <- ch_1_twitter_data
+tidy_twitter <- tidy_twitter %>% 
+  unnest_tokens(word, tweet_text) %>% 
+  anti_join(stop_words)
+
+tidy_twitter
+
+data <- read_csv("data/Roomba Reviews.csv")
+data
+```
+
+
+```{r}
+word_counts <- tidy_twitter %>%
+  # Count words by whether or not its a complaint
+  count(word, complaint_label) %>%
+  # Group by whether or not its a complaint
+  group_by(complaint_label) %>%
+  # Keep the top 20 words
+  top_n(20, n) %>%
+  # Ungroup before reordering word as a factor by the count
+  ungroup() %>%
+  mutate(word2 = fct_reorder(word, n))
+
+word_counts
+```
+
+### Visualizing word counts with facets
+
+The `word_counts` from the previous exercise have been loaded. Let's visualize the word counts for the Twitter data with separate facets for complaints and non-complaints.
+
+```{r}
+# Include a color aesthetic tied to whether or not its a complaint
+ggplot(word_counts, aes(x = word2, y = n, fill = complaint_label)) +
+  # Don't include the lengend for the column plot
+  geom_col(show.legend = FALSE) +
+  # Facet by whether or not its a complaint and make the y-axis free
+  facet_wrap(~complaint_label, scales = "free_y") +
+  # Flip the coordinates and add a title: "Twitter Word Counts"
+  coord_flip() +
+  ggtitle("Twitter Word Counts")
+```
+
+## Plotting word clouds
+
+load `wordcloud` pacakge. 
+
+```{r}
+tidy_review <- data %>% 
+  unnest_tokens(word, Review) %>% 
+  anti_join(stop_words)
+
+library(wordcloud)
+word_counts <- tidy_review %>% 
+  count(word)
+
+wordcloud(
+  words = word_counts$word,
+  freq = word_counts$n,
+  max.words = 30)
+```
+
+### Creating a word cloud
+
+We've seen bar plots, now let's visualize word counts with word clouds! `tidy_twitter` has already been loaded, tokenized, and cleaned.
+
+```{r}
+# Load the wordcloud package
+library(wordcloud)
+
+# Compute word counts and assign to word_counts
+word_counts <- tidy_twitter %>% 
+  count(word)
+
+wordcloud(
+  # Assign the word column to words
+  words = word_counts$word, 
+  # Assign the count column to freq
+  freq = word_counts$n, 
+  max.words = 30)
+```
+
+### Adding a splash of color
+
+What about just the complaints? And let's add some color. Red seems appropriate. The wordcloud package has been loaded along with tidy_twitter.
+
+```{r}
+# Compute complaint word counts and assign to word_counts
+tidy_twitter%>% head()
+
+word_counts <- tidy_twitter %>% 
+  filter(complaint_label == "Complaint") %>% 
+  count(word)
+
+# Create a complaint word cloud of the top 50 terms, colored red
+wordcloud(
+  words = word_counts$word, 
+  freq = word_counts$n, 
+  max.words = 50,
+  col = "red")
+```
+
+## Sentiment analysis
+
+### Sentiment dictionaries
+
+Four sentiment disctionaries - `bing`, `Affin`,`Loughran` and `nrc`
+
+```{r}
+tidytext::get_sentiments("bing")
+tidytext::get_sentiments("afinn")
+tidytext::get_sentiments("loughran")
+```
+
+### Counting the NRC sentiments
+
+The fourth dictionary included with the tidytext package is the nrc dictionary. Let's start our exploration with sentiment counts.
+
+```{r}
+# Load the tidyverse and tidytext packages
+library(tidyverse)
+library(tidytext)
+
+# Count the number of words associated with each sentiment in nrc
+get_sentiments("nrc") %>% 
+  count(sentiment) %>% 
+  # Arrange the counts in descending order
+  arrange(desc(n))
+```
+
+
+### Visualizing the NRC sentiments
+
+We've seen how visualizations can give us a better idea of patterns in data than counts alone. Let's visualize the sentiments from the `nrc` dictionary. I've loaded the `tidyverse` and `tidytext` packages for you already.
+
+```{r}
+# Pull in the nrc dictionary, count the sentiments and reorder them by count
+sentiment_counts <- get_sentiments("nrc") %>% 
+  count(sentiment) %>% 
+  mutate(sentiment2 = fct_reorder(sentiment, n))
+
+# Visualize sentiment_counts using the new sentiment factor column
+ggplot(sentiment_counts, aes(x = sentiment2, y = n)) +
+  geom_col() +
+  coord_flip() +
+  # Change the title to "Sentiment Counts in NRC", x-axis to "Sentiment", and y-axis to "Counts"
+  labs(
+    title = "Sentiment Counts in NRC",
+    x = "Sentiment",
+    y = "Counts"
+  )
+```
+
+### Appending dictionaries
+
+We need to use `inner_join()` to  count sentiment.
+
+```{r eval=FALSE}
+tidy_review %>% 
+  inner_join(get_sentiments("loughran")) %>% 
+  count(word, sentiment) %>% 
+  arrange(desc(n))
+```
+
+### Counting sentiment
+The `tidy_twitter` dataset has been loaded for you. Let's see what sort of sentiments are most prevalent in our Twitter data.
+
+```{r eval=FALSE}
+# Join tidy_twitter and the NRC sentiment dictionary
+sentiment_twitter <- tidy_twitter %>% 
+  inner_join(get_sentiments("nrc"))
+
+# Count the sentiments in tidy_twitter
+sentiment_twitter %>% 
+  count(sentiment) %>% 
+  # Arrange the sentiment counts in descending order
+  arrange(desc(n))
+```
+
+### Visualizing sentiment
+
+Let's explore which words are associated with each sentiment in our Twitter data.
+
+```{r}
+word_counts <- tidy_twitter %>% 
+  # Append the NRC dictionary and filter for positive, fear, and trust
+  inner_join(get_sentiments("nrc")) %>% 
+  filter(sentiment %in% c("positive", "fear", "trust")) %>%
+  # Count by word and sentiment and take the top 10 of each
+  count(word, sentiment) %>% 
+  group_by(sentiment) %>% 
+  top_n(10, n) %>% 
+  ungroup() %>% 
+  # Create a factor called word2 that has each word ordered by the count
+  mutate(word2 = fct_reorder(word, n))
+```
+
+```{r}
+# Create a bar plot out of the word counts colored by sentiment
+ggplot(word_counts, aes(word2, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  # Create a separate facet for each sentiment with free axes
+  facet_wrap(~sentiment, scales = "free") +
+  coord_flip() +
+  # Title the plot "Sentiment Word Counts" with "Words" for the x-axis
+  labs(
+    title = "Sentiment Word Counts",
+    x = "Words")
+```
+
+### Improving sentiment analysis
+
+define new variable named `overall_sentiment` by `tidyr::spread`ing certain columns.
+
+```{r}
+tidy_review <- tidy_review %>% 
+  mutate_at(vars(Stars), as.factor)
+
+sentiment_stars <- tidy_review %>% 
+  inner_join(get_sentiments("bing")) %>% 
+  count(Stars, sentiment) %>% 
+  spread(sentiment, n) %>% 
+  mutate(
+    overall_sentiment = positive - negative,
+    stars = fct_reorder(Stars, overall_sentiment)
+  )
+
+sentiment_stars %>% 
+  gather(negative:overall_sentiment, key = sentiment, value = score) %>% 
+  ggplot(aes(Stars, score, fill=sentiment))+
+  geom_col()+
+  hrbrthemes::theme_ipsum_ps()+
+  facet_wrap(~sentiment)
+```
+
+
+### Practicing reshaping data
+
+The `spread()` verb allows us to quickly reshape or stack and transpose our data, making it easier to `mutate()`.
+
+```{r}
+tidy_twitter %>% 
+  # Append the NRC sentiment dictionary
+  inner_join(get_sentiments("nrc"))%>%
+  # Count by complaint label and sentiment
+  count(complaint_label, sentiment) %>% 
+  # Spread the sentiment and count columns
+  spread(sentiment, n)
+
+# A tibble: 2 x 11
+#   complaint_label anger anticipation disgust  fear   joy negative positive
+#   <chr>           <int>        <int>   <int> <int> <int>    <int>    <int>
+# 1 Complaint         559          730     439   493   372     1272      971
+# 2 Non-Complaint     597         1394     441   670  1108     1475     2342
+# # ... with 3 more variables: sadness <int>, surprise <int>, trust <int>
+
+```
+
+
+### Practicing with grouped summaries
+
+We can use `spread()` in association with the output of grouped summaries as well.
+
+```{r}
+tidy_twitter %>% 
+  # Append the afinn sentiment dictionary
+  inner_join(get_sentiments("afinn")) %>% 
+  # Group by both complaint label and whether or not the user is verified
+  group_by(complaint_label, usr_verified) %>% 
+  # Summarize the data with an aggregate_score = sum(score)
+  summarize(aggregate_score = sum(score)) %>% 
+  # Spread the complaint_label and aggregate_score columns
+  spread(complaint_label, value = aggregate_score) %>% 
+  mutate(overall_sentiment = Complaint + `Non-Complaint`)
+```
+
+### Visualizing sentiment by complaint type
+
+Now let's see whether or not complaints really are more negative, on average.
+
+```{r}
+sentiment_twitter <- tidy_twitter %>% 
+  # Append the bing sentiment dictionary
+  inner_join(get_sentiments("bing")) %>% 
+  # Count by complaint label and sentiment
+  count(complaint_label, sentiment) %>%
+  # Spread the sentiment and count columns
+  spread(sentiment, value = n) %>%
+  # Compute overall_sentiment = positive - negative
+  mutate(overall_sentiment = positive - negative)
+
+# Create a bar plot out of overall sentiment by complaint level, colored by a complaint label factor
+ggplot(
+  sentiment_twitter, 
+  aes(x = complaint_label, y = overall_sentiment, fill = as.factor(complaint_label))
+) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() + 
+  # Title the plot "Overall Sentiment by Complaint Type," with an "Airline Twitter Data" subtitle
+  labs(
+    title = "Overall Sentiment by Complaint Type",
+    subtitle = "Airline Twitter Data"
+  )+
+  hrbrthemes::theme_ipsum_ps()
+```
+
+# Topic modeling
+In this final chapter, we move beyond word counts to uncover the underlying topics in a collection of documents. We will be using a standard topic model known as latent Dirichlet allocation.
+
+## Latent dirichlet allocation
+
+### Unsupervised learning
+
+Some more NLP vocabulary:
+- Latent Dirichlet allocation (LDA) is a standard topic model
+- A collection of documents is known as corpus
+- Bag-of-words is treating evry word in a document separately
+- Topic models find patterns of words appearing together
+- Searching for patterns rather than predicting is known as unsupervised learning
+
+### Clustering vs topic modeling
+
+clustering
+- clusters are uncovered based on distance, which is continuous
+- Every object is assigned to a single cluster
+
+Topic modeling
+- Topics are uncovered based on word frequency, which is discrete
+- Every document is mixture (i.e., partial member) of every topic 
+
+## Topics as word probabilities
+
+`lda_topics` contains the topics output from an LDA run on the Twitter data. Remember that each topic is a collection of word probabilities for all of the unique words used in the corpus. In this case, each tweet is its own document and the beta column contains the word probabilities.
+
+```{r eval=FALSE}
+# Start with the topics output from the LDA run
+lda_topics %>% 
+  # Arrange the topics by word probabilities in descending order
+  arrange(desc(beta))
+```
+
+## Summarizing topics
+Let's explore some of the implied features of the LDA output using some grouped summaries.
+
+```{r eval=FALSE}
+# Produce a grouped summary of the LDA output by topic
+lda_topics %>% 
+  group_by(topic) %>% 
+  summarize(
+    # Calculate the sum of the word probabilities
+    sum = sum(beta),
+    # Count the number of terms
+    n = n()
+  )
+```
+
+
+## Visualizing topics
+
+Using what we've covered in previous chapters, let's visualize the topics produced by the LDA.
+
+```{r eval=FALSE}
+word_probs <- lda_topics %>%
+  # Keep the top 10 highest word probabilities by topic
+  group_by(topic) %>% 
+  top_n(n=10, wt=beta) %>%
+  ungroup()%>%
+  # Create term2, a factor ordered by word probability
+  mutate(term2 = fct_reorder(term, beta))
+
+# Plot term2 and the word probabilities
+ggplot(word_probs, aes(term2, beta)) +
+  geom_col() +
+  # Facet the bar plot by topic
+  facet_wrap(~topic, scales = "free") +
+  coord_flip()
+```
+
+## Document term matrices (DTM)
+
+### Matrices and Sparcity
+
+DTM is a sparse matrix, and can be easily created with `cast_dtm()` function.
+
+```{r}
+```
+
+
+## Creating a DTM
+
+Create a DTM using our tidy_twitter data. In this case, each tweet is considered a document. Print tidy_twitter in the console to confirm the column names.
+
+```{r}
+# Start with the tidied Twitter data
+tidy_twitter %>% colnames
+tidy_twitter %>% 
+  # Count each word used in each tweet
+  count(word, tweet_id) %>% 
+  # Use the word counts by tweet to create a DTM
+  cast_dtm(tweet_id, word, n)
+```
+
+
+## Evaluating a DTM as a matrix
+Let's practice casting our tidy data into a DTM and evaluating the DTM by treating it as a matrix.
+
+In this exercise, you will create a DTM again, but with a much smaller subset of the twitter data (tidy_twitter_subset).
+
+```{r}
+# Assign the DTM to dtm_twitter
+dtm_twitter <- tidy_twitter %>% 
+  count(word, tweet_id) %>% 
+  # Cast the word counts by tweet into a DTM
+  cast_dtm(tweet_id, word, n)
+
+# Coerce dtm_twitter into a matrix called matrix_twitter
+matrix_twitter <- as.matrix(dtm_twitter)
+
+# Print rows 1 through 5 and columns 90 through 95
+matrix_twitter[1:5, 90:95]
+```
+
+## Running an LDA
+
+```{r}
+library(topicmodels)
+
+lda_out <- LDA(
+  dtm_twitter,
+  k = 2,
+  method = "Gibbs",
+  control = list(seed = 42))
+```
+
+```{r}
+glimpse(lda_out)
+
+lda_topics <- lda_out %>% 
+  broom::tidy(matrix= "beta")
+
+lda_topics %>% 
+  arrange(desc(beta))
+```
+
+
+
+## Fitting an LDA
+
+It's time to run your first topic model! As discussed, the three additional arguments of the `LDA()` function are critical for properly running a topic model. Note that running the `LDA()` function could take about 10 seconds. The `tidyverse` and `tidytext` packages along with the `tidy_twitter` dataset have been loaded for you.
+
+```{r}
+# Load the topicmodels package
+library(topicmodels)
+
+# Cast the word counts by tweet into a DTM
+dtm_twitter <- tidy_twitter %>% 
+  count(tweet_id, word) %>% 
+  cast_dtm(tweet_id, word, n)
+
+# Run an LDA with 2 topics and a Gibbs sampler
+lda_out <- LDA(
+  dtm_twitter,
+  k = 2,
+  method = "gibbs",
+  control = list(seed = 42)
+)
+```
+
+
+## Tidying LDA output
+
+We've loaded the LDA output `lda_out` from the previous exercise. While there are a number of things of interest in the output, the topics themselves are of general interest. Let's extract these values.
+
+```{r}
+# Glimpse the topic model output
+glimpse(lda_out)
+
+# Tidy the matrix of word probabilities
+lda_topics <- lda_out %>% 
+  broom::tidy(matrix = "beta")
+
+# Arrange the topics by word probabilities in descending order
+lda_topics %>% 
+  arrange(desc(beta))
+```
+
+## Comparing LDA output
+
+We've only run a single LDA with a specific number of topics. The tidied output from that model, lda_out_tidy, has been loaded along with dtm_twitter in your workspace. Now run LDA with 3 topics and compare the outputs.
+
+```{r}
+# Run an LDA with 3 topics and a Gibbs sampler
+lda_out2 <- LDA(
+  dtm_twitter,
+  k = 3,
+  method = "Gibbs",
+  control = list(seed = 42)
+)
+
+# Tidy the matrix of word probabilities
+lda_topics2 <- lda_out2 %>% 
+  tidy(matrix = "beta")
+
+# Arrange the topics by word probabilities in descending order
+lda_topics2 %>% 
+  arrange(desc(beta))
+
+lda_topics %>% 
+  group_by(topic) %>% 
+  top_n(., 10, beta) %>% 
+  ggplot(aes(reorder(term,beta), beta, fill=as.factor(topic)))+
+  geom_col()+
+  facet_wrap(~topic, scales = "free")+
+  coord_flip()
+```
+
+## Naming three topics
+
+Let's compare two possible topic model solutions and try naming the topics. Let's start with a three topic model named `lda_topics2`.
+
+```{r}
+# Select the top 15 terms by topic and reorder term
+word_probs2 <- lda_topics2 %>% 
+  group_by(topic) %>% 
+  top_n(15, beta) %>% 
+  ungroup()%>%
+  mutate(term2 = reorder(term, beta))
+
+# Plot word_probs2, color and facet based on topic
+ggplot(
+  word_probs2, 
+  aes(term2, beta, fill=as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~topic, scales = "free") +
+  coord_flip()
+```
+
+## Naming four topics
+
+```{r}
+# Select the top 15 terms by topic and reorder term
+
+lda_out3 <- LDA(
+  dtm_twitter,
+  k = 4,
+  method = "Gibbs",
+  control = list(seed = 42)
+)
+
+# Tidy the matrix of word probabilities
+lda_topics3 <- lda_out3 %>% 
+  tidy(matrix = "beta")
+
+word_probs3 <- lda_topics3 %>% 
+  group_by(topic) %>% 
+  top_n(15, beta) %>% 
+  ungroup() %>%
+  mutate(term2 = fct_reorder(term, beta))
+
+# Plot word_probs3, color and facet based on topic
+ggplot(
+  word_probs3, 
+  aes(term2, beta, fill = as.factor(topic))
+) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+```
+
+
+
+
+
+
+
