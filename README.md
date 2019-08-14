@@ -42,7 +42,9 @@ https://www.datacamp.com/courses/introduction-to-time-series-analysis
 - ARMA and ARIMA modeling by `astsa` package.   
 https://www.datacamp.com/courses/arima-modeling-with-r  
 
-
+### Intro to text analytics
+- Sentiment analysis and topic modeling by `topicmodeling` and `tidytext` packages.
+https://www.datacamp.com/courses/introduction-to-text-analysis-in-r
 
 
 
