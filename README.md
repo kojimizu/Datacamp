@@ -9,8 +9,8 @@ This can become legacy archive. Update pending.
 | Dealing with NA       | 2019 April                  |  NA visualization/imputation by `naniar`             |[Here](https://github.com/kojimizu/Datacamp/blob/master/Missing%20data%20(DC)/Dealing_with_missing_data.md)  |
 | Unsupervised Learning | 2019 April                  |  K-means, Hierachical clustering            c        |[Here](https://github.com/kojimizu/Datacamp/blob/master/Unsupervised%20Learning/Unsupervised_learning.md)    |
 | Time Series intro     | 2019 May                    |  Time series analysis Basics                         |[Here](https://www.datacamp.com/courses/introduction-to-time-series-analysis)                                |
-| ARIMA modeling        | 2019 June                   |  Time series analysis Basics                         |[Here](https://www.datacamp.com/courses/arima-modeling-with-r)|
-
+| ARIMA modeling        | 2019 June                   |  ARIMA modeling                                |     [Here](https://www.datacamp.com/courses/arima-modeling-with-r)|
+| Text analytics        | 2019 August                   |  Sentiment analysis, topic modeling          |     [Here](https://www.datacamp.com/courses/introduction-to-text-analysis-in-r)|  
 
 ###  ML in Tidyverse   
 This tutorial was reviewed on March, 2019, offered by DataCamp.
