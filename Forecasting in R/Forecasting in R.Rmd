@@ -3,6 +3,8 @@ title: "Forecasting in R"
 author: "Koji Mizumura"
 date: "`r Sys.Date()`"
 output:
+  md_document: 
+    
   rmdformats::readthedown:
     number_sections: yes
     fig_height: 10
@@ -735,7 +737,7 @@ function (y, forecastfunction, h = 1, ...)
 
 In this exercise you will use an existing forecasting function as well as one that has been created for you. Remember, sometimes simple methods work better than more sophisticated methods!
 
-```{r}
+```{r eval=FALSE}
 # Function to return ETS forecasts
 fets <- function(y, h) {
   forecast(ets(y), h = h)
@@ -1033,6 +1035,19 @@ d <- 1
 
 # Plot forecasts of fit
 fit %>% forecast(h = 10) %>% autoplot()
+```
+
+## Forecasting with ARIMA models
+The automatic method in the previous exercise chose an ARIMA(0,1,1) with drift model for the `austa` data, that is, $y_t = c + y_{t-1} + \thetae_{t-1} + e_t$/ You will now experiment with various other ARIMA models for the data to see what difference it makes to the forecast.
+
+The `Arima()` function can be used to select a specific ARIMA model. Its first argument, `order`, is set to a vector that specifies the values of $p, d and q$. The second argument, `include.constant`, is a booolean that determines if the constant c, or drift, should be included. Below is an example of a pipe function that would plot forecasts of `usnetelec` from an ARIMA(2,1,2) model with drift:
+
+```{r warning=FALSE}
+usnetelec %>%
+    Arima(order = c(2,1,2), include.constant = TRUE) %>%
+    forecast() %>%
+    autoplot()+
+    hrbrthemes::theme_ipsum_ps()
 ```
 
 
