@@ -49,6 +49,12 @@ https://www.datacamp.com/courses/arima-modeling-with-r
 - Sentiment analysis and topic modeling by `topicmodeling` and `tidytext` packages.
 https://www.datacamp.com/courses/introduction-to-text-analysis-in-r
 
+### Forecasting in R
+Rob Hyndman tutorial regarding ETS, ARMA, ARIMA, TBATS. 
+
+
+
+
 
 
 
