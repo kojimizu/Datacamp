@@ -11,6 +11,9 @@ This can become legacy archive. Update pending.
 | Time Series intro     | 2019 May                    |  Time series analysis Basics                         |[Here](https://www.datacamp.com/courses/introduction-to-time-series-analysis)                                |
 | ARIMA modeling        | 2019 June                   |  ARIMA modeling                                |     [Here](https://www.datacamp.com/courses/arima-modeling-with-r)|
 | Text analytics        | 2019 August                   |  Sentiment analysis, topic modeling          |     [Here](https://www.datacamp.com/courses/introduction-to-text-analysis-in-r)|  
+| Forecasting in R      | 2019 December                   |  ETS / ARIMA / TBATS          |     [Here](https://github.com/kojimizu/Datacamp/blob/master/Forecasting%20in%20R/Forecasting-in-R.md)|  
+
+
 
 ###  ML in Tidyverse   
 This tutorial was reviewed on March, 2019, offered by DataCamp.
