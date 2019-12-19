@@ -1,8 +1,11 @@
-    library(tidyverse)
-    library(forecast)
-    library(magrittr)
-    library(tidymodels)
-    library(readxl)
+
+    pacman::p_load(tidyverse, forecast, magrittr, tidymodels, readxl)
+
+    # library(tidyverse)
+    # library(forecast)
+    # library(magrittr)
+    # library(tidymodels)
+    # library(readxl)
 
 Exploring and visualizing time series
 =====================================
@@ -1770,10 +1773,773 @@ makes to the forecast.
 
 The `Arima()` function can be used to select a specific ARIMA model. Its
 first argument, `order`, is set to a vector that specifies the values of
-*p*, *d**a**n**d**q*. The second argument, include.constant, is a
+*p*, *d**a**n**d**q*. The second argument, `include.constant`, is a
 booolean that determines if the constant c, or drift, should be
 included. Below is an example of a pipe function that would plot
-forecasts of usnetelec from an ARIMA(2,1,2) model with drift:
+forecasts of `usnetelec` from an ARIMA(2,1,2) model with drift:
+
+    usnetelec %>%
+        Arima(order = c(2,1,2), include.constant = TRUE) %>%
+        forecast() %>%
+        autoplot()+
+        hrbrthemes::theme_ipsum_ps()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-49-1.png" style="display: block; margin: auto;" />
+
+    # Plot forecasts from an ARIMA(0,1,1) model with no drift
+    austa %>% Arima(order = c(0, 1, 1), include.constant = FALSE) %>% forecast() %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-50-1.png" style="display: block; margin: auto;" />
+
+
+    # Plot forecasts from an ARIMA(2,1,3) model with drift
+    austa %>% Arima(order = c(2, 1, 3), include.constant = TRUE) %>% forecast() %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-50-2.png" style="display: block; margin: auto;" />
+
+
+    # Plot forecasts from an ARIMA(0,0,1) model with a constant
+    austa %>% Arima(order = c(0, 0, 1), include.constant = TRUE) %>% forecast() %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-50-3.png" style="display: block; margin: auto;" />
+
+
+    # Plot forecasts from an ARIMA(0,2,1) model with no constant
+    austa %>% Arima(order = c(0, 2, 1), include.constant = FALSE) %>% forecast() %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-50-4.png" style="display: block; margin: auto;" />
+
+Comparing auto.arima() and ets() on non-seasonal data
+-----------------------------------------------------
+
+The AICc statistic is useful for selecting between models in the same
+class. For example, you can use it to select an ETS model or to select
+an ARIMA model. However, you cannot use it to compare ETS and ARIMA
+models because they are in different model classes.
+
+Instead, you can use time series cross-validation to compare an ARIMA
+model and an ETS model on the austa data. Because `tsCV()` requires
+functions that return forecast objects, you will set up some simple
+functions that fit the models and return the forecasts. The arguments of
+`tsCV()` are a time series, forecast function, and forecast horizon `h`.
+Examine this code snippet from the second chapter:
+
+    e <- matrix(NA_real_, nrow = 1000, ncol = 8)
+    for (h in 1:8)
+      e[, h] <- tsCV(goog, naive, h = h)
+      ...
+
+Furthermore, recall that pipe operators in R take the value of whatever
+is on the left and pass it as an argument to whatever is on the right,
+step by step, from left to right. Here’s an example based on code you
+saw in an earlier chapter:
+
+    # Plot 20-year forecasts of the lynx series modeled by ets()
+    lynx %>% ets() %>% forecast(h = 20) %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-52-1.png" style="display: block; margin: auto;" />
+
+In this exercise, you will compare the MSE of two forecast functions
+applied to austa, and plot forecasts of the function that computes the
+best forecasts. Once again, austa has been loaded into your workspace.
+
+    # Set up forecast functions for ETS and ARIMA models
+    fets <- function(x, h) {
+      forecast(ets(x), h = h)
+    }
+    farima <- function(x, h) {
+      forecast(auto.arima(x), h = h)
+    }
+
+    # Compute CV errors for ETS on austa as e1
+    e1 <- tsCV(austa, fets, h = 1)
+
+    # Compute CV errors for ARIMA on austa as e2
+    e2 <- tsCV(austa, farima, h = 1)
+
+    # Find MSE of each model class
+    mean(e1^2, na.rm = TRUE)
+    ## [1] 0.05623684
+    mean(e2^2, na.rm = TRUE)
+    ## [1] 0.04336277
+
+    # Plot 10-year forecasts using the best model class
+    austa %>% farima(h = 10) %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-53-1.png" style="display: block; margin: auto;" />
+
+Seasonal ARIMA models
+---------------------
+
+ARIMA models can also handle seasonal time series. We just need to add
+seasonal differencing and a whole lot more lagged terms into the model.
+
+ARIMA with (p,d,q) and (P,D,Q)m
+
+-   (p,d,q): non-seasonal part of the model
+    -   d: number of lag-1 differences
+    -   p:number of ordinary AR lags (*y*<sub>*t* − *p*</sub>)
+    -   q: number of ordinary MA lags (*ϵ*<sub>*t* − *q*</sub>)
+-   (P,D,Q): Seasonal part of the model
+    -   D: number of seasonal differences
+    -   P:number of ordinary AR lags
+        (*y*<sub>*t* − *P*<sub>*m*</sub></sub>)
+    -   Q: number of ordinary MA lags
+        (*ϵ*<sub>*t* − *P*<sub>*m*</sub></sub>)
+
+There is increasing variation, so we need to use a Box-cox
+transformation. To keep it simple, I will use log transformation and set
+`lambda = 0`.
+
+    autoplot(debitcards)+
+      xlab("Year")+
+      ylab("million ISK")+
+      ggtitle("Retail debit card usage in Iceland")+
+      hrbrthemes::theme_ipsum_ps()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-54-1.png" style="display: block; margin: auto;" />
+
+Everything else about the model can be handled automatically using the
+`auto.arima()` function.
+
+    fit <- auto.arima(debitcards, lambda=0)
+    fit
+    ## Series: debitcards 
+    ## ARIMA(0,1,4)(0,1,1)[12] 
+    ## Box Cox transformation: lambda= 0 
+    ## 
+    ## Coefficients:
+    ##           ma1     ma2     ma3      ma4     sma1
+    ##       -0.7959  0.0856  0.2628  -0.1751  -0.8144
+    ## s.e.   0.0825  0.0988  0.0999   0.0798   0.1118
+    ## 
+    ## sigma^2 estimated as 0.002321:  log likelihood=239.33
+    ## AIC=-466.67   AICc=-466.08   BIC=-448.56
+
+It tells us that the 4 lagged errors and 1 seasonally lagged error have
+been selected. The 0s indicate that no autoregression terms have been
+used. ARIMA moels can be hard to interpret, and the coefficients don’t
+have neat explanation in terms of original data.
+
+But they are very powerful models which can handle a very wide range of
+time series. We can pass the model object to the `forecast()` function
+to get forecasts.
+
+    fit %>% 
+      forecast(h = 36) %>% 
+      autoplot()+
+      xlab("Year")+
+      hrbrthemes::theme_ipsum_ps()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-56-1.png" style="display: block; margin: auto;" />
+
+Notice how the seasonal parts of the model have captured the seasonality
+quite well.A nice feature of seasonal ARIMA model is that they allow the
+seasonality ot change over time. The shape of the seasonality near the
+end of the series, and not so much on the seasonal patterns at the start
+of the series. The forecasts have a trend without needing to include the
+constant.
+
+Autotmatic ARIMA models for seasonal time series
+------------------------------------------------
+
+As you learned in the video, the auto.arima() function also works with
+seasonal data. Note that setting lambda = 0 in the auto.arima() function
+- applying a log transformation - means that the model will be fitted to
+the transformed data, and that the forecasts will be back-transformed
+onto the original scale.
+
+After applying `summary()` to this kind of fitted model, you may see
+something like the output below which corresponds with
+(p,d,q)(P,D,Q)\[m\]:
+
+ARIMA(0,1,4)(0,1,1)\[12\] In this exercise, you will use these functions
+to model and forecast the pre-loaded h02 data, which contains monthly
+sales of cortecosteroid drugs in Australia.
+
+    # Check that the logged h02 data have stable variance
+    h02 %>% log() %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-57-1.png" style="display: block; margin: auto;" />
+
+
+    # Fit a seasonal ARIMA model to h02 with lambda = 0
+    fit <- auto.arima(h02, lambda = 0)
+
+    # Summarize the fitted model
+    summary(fit)
+    ## Series: h02 
+    ## ARIMA(2,1,1)(0,1,2)[12] 
+    ## Box Cox transformation: lambda= 0 
+    ## 
+    ## Coefficients:
+    ##           ar1      ar2     ma1     sma1     sma2
+    ##       -1.1358  -0.5753  0.3683  -0.5318  -0.1817
+    ## s.e.   0.1608   0.0965  0.1884   0.0838   0.0881
+    ## 
+    ## sigma^2 estimated as 0.004278:  log likelihood=248.25
+    ## AIC=-484.51   AICc=-484.05   BIC=-465
+    ## 
+    ## Training set error measures:
+    ##                        ME      RMSE        MAE        MPE     MAPE
+    ## Training set -0.003931805 0.0501571 0.03629816 -0.5323365 4.611253
+    ##                   MASE         ACF1
+    ## Training set 0.5987988 -0.003740267
+
+    # Record the amount of lag-1 differencing and seasonal differencing used
+    d <- 1
+    D <- 1
+
+    # Plot 2-year forecasts
+    fit %>% forecast(h = 24) %>% autoplot()+
+      hrbrthemes::theme_ipsum_rc()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-57-2.png" style="display: block; margin: auto;" />
+
+Exploring auto.arima() options
+------------------------------
+
+The `auto.arima()` function needs to estimate a lot of different models,
+and various short-cuts are used to try to make the function as fast as
+possible. This can cause a model to be returned which does not actually
+have the smallest AICc value. To make `auto.arima()` work harder to find
+a good model, add the optional argument `stepwise = FALSE` to look at a
+much larger collection of models.
+
+Here, you will try finding an ARIMA model for the pre-loaded euretail
+data, which contains quarterly retail trade in the Euro area from
+1996-2011. Inspect it in the console before beginning this exercise.
+
+    # Find an ARIMA model for euretail
+    fit1 <- auto.arima(euretail)
+
+    # Don't use a stepwise search
+    fit2 <- auto.arima(euretail, stepwise = FALSE)
+
+    # AICc of better model
+    AICc <- 68.39
+
+    # Compute 2-year forecasts from better model
+    fit2 %>% forecast(h = 8) %>% autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-58-1.png" style="display: block; margin: auto;" />
+
+Comparing auto.arima() and ets() on seasonal data
+-------------------------------------------------
+
+What happens when you want to create training and test sets for data
+that is more frequent than yearly? If needed, you can use a vector in
+form `c(year, period)` for the start and/or end keywords in the
+`window()` function. You must also ensure that you’re using the
+appropriate values of h in forecasting functions. Recall that h should
+be equal to the length of the data that makes up your test set.
+
+For example, if your data spans 15 years, your training set consists of
+the first 10 years, and you intend to forecast the last 5 years of data,
+you would use `h = 12 * 5` not `h = 5` because your test set would
+include 60 monthly observations. If instead your training set consists
+of the first 9.5 years and you want forecast the last 5.5 years, you
+would use `h = 66` to account for the extra 6 months.
+
+In the final exercise for this chapter, you will compare seasonal ARIMA
+and ETS models applied to the quarterly cement production data qcement.
+Because the series is very long, you can afford to use a training and
+test set rather than time series cross-validation. This is much faster.
+
+The qcement data is available to use in your workspace.
+
+    # Use 20 years of the qcement data beginning in 1988
+    train <- window(qcement, start = 1988, end = c(2007, 4))
+
+    # Fit an ARIMA and an ETS model to the training data
+    fit1 <- auto.arima(train)
+    fit2 <- ets(train)
+
+    # Check that both models have white noise residuals
+    checkresiduals(fit1)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-59-1.png" style="display: block; margin: auto;" />
+
+    ## 
+    ##  Ljung-Box test
+    ## 
+    ## data:  Residuals from ARIMA(1,0,1)(2,1,1)[4] with drift
+    ## Q* = 3.3058, df = 3, p-value = 0.3468
+    ## 
+    ## Model df: 6.   Total lags used: 9
+    checkresiduals(fit2)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-59-2.png" style="display: block; margin: auto;" />
+
+    ## 
+    ##  Ljung-Box test
+    ## 
+    ## data:  Residuals from ETS(M,N,M)
+    ## Q* = 6.3457, df = 3, p-value = 0.09595
+    ## 
+    ## Model df: 6.   Total lags used: 9
+
+    # Produce forecasts for each model
+    fc1 <- forecast(fit1, h = 25)
+    fc2 <- forecast(fit2, h = 25)
+
+    # Use accuracy() to find best model based on RMSE
+    forecast::accuracy(fc1, qcement)
+    ##                        ME      RMSE        MAE        MPE     MAPE
+    ## Training set -0.006205705 0.1001195 0.07988903 -0.6704455 4.372443
+    ## Test set     -0.158835253 0.1996098 0.16882205 -7.3332836 7.719241
+    ##                   MASE        ACF1 Theil's U
+    ## Training set 0.5458078 -0.01133907        NA
+    ## Test set     1.1534049  0.29170452 0.7282225
+    forecast::accuracy(fc2, qcement)
+    ##                       ME      RMSE        MAE        MPE     MAPE
+    ## Training set  0.01406512 0.1022079 0.07958478  0.4938163 4.371823
+    ## Test set     -0.13495515 0.1838791 0.15395141 -6.2508975 6.986077
+    ##                   MASE        ACF1 Theil's U
+    ## Training set 0.5437292 -0.03346295        NA
+    ## Test set     1.0518075  0.53438371  0.680556
+    bettermodel <- fit2
 
 Advanced methods
 ================
+
+Forecasting sales allowing for advertising expenditure
+------------------------------------------------------
+
+Welcome to the last chapter of the course!
+
+The `auto.arima()` function will fit a dynamic regression model with
+ARIMA errors. The only change to how you used it previously is that you
+will now use the xreg argument containing a matrix of regression
+variables. Here are some code snippets from the video:
+
+    > fit <- auto.arima(uschange[, "Consumption"],
+                        xreg = uschange[, "Income"])
+
+    > # rep(x, times)
+    > fcast <- forecast(fit, xreg = rep(0.8, 8))
+
+You can see that the data is set to the Consumption column of uschange,
+and the regression variable is the Income column. Furthermore, the
+`rep()` function in this case would replicate the value 0.8 exactly
+eight times for the matrix argument xreg.
+
+In this exercise, you will model sales data regressed against
+advertising expenditure, with an ARMA error to account for any serial
+correlation in the regression errors. The data are available in your
+workspace as advert and comprise 24 months of sales and advertising
+expenditure for an automotive parts company. The plot shows sales vs
+advertising expenditure.
+
+Think through everything you have learned so far in this course, inspect
+the advert data in your console, and read each instruction carefully to
+tackle this challenging exercise.
+
+    # Time plot of both variables
+    autoplot(advert, facets=TRUE)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-60-1.png" style="display: block; margin: auto;" />
+
+    advert
+    ## Time Series:
+    ## Start = 1 
+    ## End = 24 
+    ## Frequency = 1 
+    ##    advert sales
+    ##  1     25  92.8
+    ##  2      0  79.2
+    ##  3     15  84.5
+    ##  4     10  83.0
+    ##  5     20  88.1
+    ##  6     10  83.9
+    ##  7      5  79.9
+    ##  8      5  81.1
+    ##  9     15  86.4
+    ## 10     15  86.3
+    ## 11      5  79.9
+    ## 12     20  86.6
+    ## 13     15  85.4
+    ## 14      5  80.5
+    ## 15     10  83.5
+    ## 16     25  92.5
+    ## 17     15  89.5
+    ## 18      5  83.6
+    ## 19     15  89.1
+    ## 20     20  90.9
+    ## 21     25  92.7
+    ## 22     15  88.1
+    ## 23      0  79.5
+    ## 24      5  82.9
+    # Fit ARIMA model
+    fit <- auto.arima(advert[, "sales"], xreg = advert[, "advert"], stationary = TRUE)
+
+    # Check model. Increase in sales for each unit increase in advertising
+    salesincrease <- coefficients(fit)[3]
+
+    # Forecast fit as fc
+    fc <- forecast(fit, xreg = rep(10,6))
+
+    # Plot fc with x and y labels
+    autoplot(fc) + xlab("Month") + ylab("Sales")
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-60-2.png" style="display: block; margin: auto;" />
+
+Forecasting electricity demand
+------------------------------
+
+You can also model daily electricity demand as a function of
+temperature. As you may have seen on your electric bill, more
+electricity is used on hot days due to air conditioning and on cold days
+due to heating.
+
+In this exercise, you will fit a quadratic regression model with an ARMA
+error. One year of daily data are stored as elec including total daily
+demand, an indicator variable for workdays (a workday is represented
+with 1, and a non-workday is represented with 0), and daily maximum
+temperatures. Because there is weekly seasonality, the frequency has
+been set to 7.
+
+Let’s take a look at the first three rows:
+
+    > elec[1:3, ]
+           Demand Temperature Workday
+    [1,] 168.2798        20.2       0
+    [2,] 183.0822        21.9       1
+    [3,] 184.5135        25.1       1
+
+`elec` has been pre-loaded into your workspace.
+
+    # Time plots of demand and temperatures
+    library(fpp2)
+    elec <- elecdemand
+
+    autoplot(elec[, c("Demand", "Temperature")], facets = TRUE)+
+      hrbrthemes::theme_ipsum_tw()
+
+    # Matrix of regressors
+    xreg <- cbind(MaxTemp   = elec[, "Temperature"], 
+                  MaxTempSq = elec[, "Temperature"]^2, 
+                  Workday   = elec[, "Workday"])
+
+    # Fit model
+    fit <- auto.arima(elec[, "Demand"], xreg = xreg)
+
+    # Forecast fit one day ahead
+    forecast(fit, xreg = cbind(20, 20^2, 1))
+
+Dynamic harmonic regression
+---------------------------
+
+One particular one kind of dynamic regression is called “dynamic
+harmonic regression”. This uses Fourier terms to handle seasonality.
+
+Periodic seasonality can be handled using pairs of Fourier terms.
+$$
+s\_k(t) = sin(\\frac{2\_{\\phi}kt}{m}) \\\\
+c\_k(t) = cos(\\frac{2\_{\\phi}kt}{m})
+$$
+
+A series of sine and cosine terms of the right frequencies can
+approximate any periodic function.
+
+*y*<sub>*t*</sub> = *β*<sub>0</sub> + *Σ**k* = 1<sup>*K*</sup>\[*α*<sub>*k*</sub>*s*<sub>*k*</sub>(*t*) + *γ*<sub>*k*</sub>*c*<sub>*k*</sub>(*t*)\] + *e*<sub>*t*</sub>
+
+-   `m` = seasonal period
+-   Every periodic function can be approximated by sums of sin and cos
+    terms for large enough *K*
+
+We can use them for seasonal patterns when forecasting. These Fourier
+terms are predictors in our dynamic regression model. The more terms we
+include in the model, the more complicated our seasonal pattern will be.
+
+Forecasting weekly data
+-----------------------
+
+With weekly data, it is difficult to handle seasonality using ETS or
+ARIMA models as the seasonal length is too large (approximately `52`).
+Instead, you can use harmonic regression which uses sines and cosines to
+model the seasonality.
+
+The `fourier()` function makes it easy to generate the required
+harmonics. The higher the order (K), the more “wiggly” the seasonal
+pattern is allowed to be. With K=1, it is a simple sine curve. You can
+select the value of K by minimizing the AICc value. As you saw in the
+video, `fourier()` takes in a required time series, required number of
+Fourier terms to generate, and optional number of rows it needs to
+forecast:
+
+    > # fourier(x, K, h = NULL)
+
+    > fit <- auto.arima(cafe, xreg = fourier(cafe, K = 6),
+                        seasonal = FALSE, lambda = 0)
+    > fit %>%
+        forecast(xreg = fourier(cafe, K = 6, h = 24)) %>%
+        autoplot() + ylim(1.6, 5.1)
+
+The pre-loaded gasoline data comprises weekly data on US finished motor
+gasoline products. In this exercise, you will fit a harmonic regression
+to this data set and forecast the next 3 years.
+
+    # Set up harmonic regressors of order 13
+    harmonics <- fourier(gasoline, K = 13)
+
+    # Fit regression model with ARIMA errors
+    fit <- auto.arima(gasoline, xreg = harmonics, seasonal = FALSE)
+
+    # Forecasts next 3 years
+    newharmonics <- fourier(gasoline, K = 13, h = 156)
+    fc <- forecast(fit, xreg = newharmonics)
+
+    # Plot forecasts fc
+    autoplot(fc)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-62-1.png" style="display: block; margin: auto;" />
+
+Harmonic regression for multiple seasonality
+--------------------------------------------
+
+Harmonic regressions are also useful when time series have multiple
+seasonal patterns. For example, taylor contains half-hourly electricity
+demand in England and Wales over a few months in the year 2000. The
+seasonal periods are 48 (daily seasonality) and 7 x 48 = 336 (weekly
+seasonality). There is not enough data to consider annual seasonality.
+
+`auto.arima()` would take a long time to fit a long time series such as
+this one, so instead you will fit a standard regression model with
+Fourier terms using the `tslm()` function. This is very similar to
+`lm()` but is designed to handle time series. With multiple seasonality,
+you need to specify the order K for each of the seasonal periods.
+
+    # The formula argument is a symbolic description
+    # of the model to be fitted
+
+    > args(tslm)
+    function (formula, ...)
+
+`tslm()` is a newly introduced function, so you should be able to follow
+the pre-written code for the most part. The taylor data are loaded into
+your workspace.
+
+    # Fit a harmonic regression using order 10 for each type of seasonality
+    fit <- tslm(taylor ~ fourier(taylor, K = c(10, 10)))
+
+    # Forecast 20 working days ahead - 20 days * 48 data points per day
+    fc <- forecast(fit, newdata = data.frame(fourier(taylor, K = c(10,10), h = 960)))
+
+    # Plot the forecasts
+    autoplot(fc)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-63-1.png" style="display: block; margin: auto;" />
+
+
+    # Check the residuals of fit
+    checkresiduals(fit)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-63-2.png" style="display: block; margin: auto;" />
+
+    ## 
+    ##  Breusch-Godfrey test for serial correlation of order up to 672
+    ## 
+    ## data:  Residuals from Linear regression model
+    ## LM test = 3938.9, df = 672, p-value < 2.2e-16
+
+Forecasting call bookings
+-------------------------
+
+Another time series with multiple seasonal periods is `calls`, which
+contains 20 consecutive days of 5-minute call volume data for a large
+North American bank. There are 169 5-minute periods in a working day,
+and so the weekly seasonal frequency is 5 x 169 = 845. The weekly
+seasonality is relatively weak, so here you will just model daily
+seasonality. `calls` is pre-loaded into your workspace.
+
+The residuals in this case still fail the white noise tests, but their
+autocorrelations are tiny, even though they are significant. This is
+because the series is so long. It is often unrealistic to have residuals
+that pass the tests for such long series. The effect of the remaining
+correlations on the forecasts will be negligible.
+
+-   Plot the calls data to see the strong daily seasonality and weak
+    weekly seasonality.
+-   Set up the xreg matrix using order 10 for daily seasonality and 0
+    for weekly seasonality. Note that if you incorrectly - specify your
+    vector, your session may expire!
+-   Fit a dynamic regression model called fit using auto.arima() with
+    seasonal = FALSE and stationary = TRUE.
+-   Check the residuals of the fitted model.
+-   Create the forecasts for 10 working days ahead as fc, and then plot
+    it. The exercise description should help you determine the proper
+    value of h.
+
+<!-- -->
+
+    # Plot the calls data
+    autoplot(calls)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-64-1.png" style="display: block; margin: auto;" />
+
+
+    # Set up the xreg matrix
+    xreg <- fourier(calls, K = c(10, 0))
+
+    # Fit a dynamic regression model
+    fit <- auto.arima(calls, xreg = xreg, seasonal = FALSE, stationary = TRUE)
+
+    # Check the residuals
+    checkresiduals(fit)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-64-2.png" style="display: block; margin: auto;" />
+
+    ## 
+    ##  Ljung-Box test
+    ## 
+    ## data:  Residuals from Regression with ARIMA(5,0,1) errors
+    ## Q* = 6846.8, df = 1663, p-value < 2.2e-16
+    ## 
+    ## Model df: 27.   Total lags used: 1690
+
+    # Plot forecast for 10 working days ahead
+    fc <- forecast(fit, xreg = fourier(calls, c(10, 0), h = 1690))
+    autoplot(fc)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-64-3.png" style="display: block; margin: auto;" />
+
+TBATS Models
+------------
+
+A TBATS models combines many of the components, already used in the
+models we have used into one single automated framework.
+
+-   Trigonometric terms of seasonality
+-   Box-Cox transfomations for heterogeneity
+-   ARMA errors for short-term dynamics
+-   Trend (possily damped)
+-   Seasonal (including multiple and non-integer periods)
+
+This makes them very convenient, but also somewhat dangerous as
+sometimes the automatic choices are not so good.
+
+### US Gasoline data
+
+    gasoline %>% 
+      tbats() %>% 
+      forecast() %>% 
+      autoplot()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-65-1.png" style="display: block; margin: auto;" />
+
+-   The first part is Box-Cox parameter meaning no transformation was
+    required
+-   The second ARMA error - (0,0) means p=0, q=0 so a simple white noise
+    error was used.
+-   The third - damping parameter for trend
+
+No transformation, ARMA, damping.
+
+&lt;52,18,14&gt; - 52: Seasonal period - 18: the number of weeks in a
+year - 14 fourier terms selected
+
+The forecasts look ok, but perhaps they are a little low.
+
+### Call center data
+
+This example is the call volume every 5-minutes to Americn bank.
+
+    gasoline %>% 
+      tbats() %>% 
+      forecast() %>% 
+      autoplot() + 
+      xlab("Year") + 
+      ylab("Thousand Barriers per Day")+
+      hrbrthemes::theme_ipsum_ps()
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-66-1.png" style="display: block; margin: auto;" />
+
+The `tbats()` function is slow for very long time series, so I am only
+using the last few months of data.More data would not make much more
+difference.
+
+    library(tictoc) # load tictoc package measuring performance time 
+
+    tictoc::tic()
+    fpp2::calls %>% 
+      window(start = 20) %>% 
+      tbats() %>% 
+      forecast() %>% 
+      autoplot() +
+      xlab("Weeks") + 
+      ylab("Calls")
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-67-1.png" style="display: block; margin: auto;" />
+
+    tictoc::toc()
+    ## 342.59 sec elapsed
+
+`<TBATS(0.571, {0,0}, -, {<169,6>, <845,4>})>`
+
+Here, the Box-Cox transformation parameter is 0.571, so close to square
+root. There is no ARMA term and no damping parameter.
+
+The Fourier-like terms are in two groups because there are two types of
+seasonality. There are 169 5-minutes periods in a working day, and 845
+periods in a 5-day working week.
+
+6 pairs of terms are included for daily seasonality, and 4 pairts of
+terms are included for weekly seasonality.
+
+In this case, the prediction intervals seem a little wide, but the
+forecasts loook ok.
+
+To summarize, a TBATS model is very general and handles a large range of
+time series. It is especially useful for data with large seasonal
+periods, and multiple seasonal periods.
+
+As I said ealier, tbats is conveniently automatic, but sometimes the
+automation is not perfect. Sometimes the prediction intervals are often
+too wide, even thouh the point ofrecats might look ok.
+
+The automation also makes everything rather slow, especially on very
+long time series, because it needs to test lots of different possible
+ways of putting the model together.
+
+\#\#TBATS models for electricity demand
+
+As you saw in the video, a TBATS model is a special kind of time series
+model. with multiple seasonal time series, so in this exercise you will
+try it on a simpler series to save time. Let’s break down elements of a
+TBATS model in TBATS(1, {0,0}, -, {&lt;51.18,14&gt;}), one of the graph
+titles from the video:
+
+–| Component | Meaning | –| 1 | Box-Cox tr parameter | –| `{0,0}` | ARMA
+error | –| `-` | Damping parameter | –| `{\` | Seasonal period, Fourier
+terms |
+
+The `gas` data contains Australian monthly gas production. A plot of the
+data shows the variance has changed a lot over time, so it needs a
+transformation. The seasonality has also changed shape over time, and
+there is a strong trend. This makes it an ideal series to test the
+`tbats()` function which is designed to handle these features.
+
+`gas` is available to use in your workspace.
+
+    # Plot the gas data
+    autoplot(gas)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-68-1.png" style="display: block; margin: auto;" />
+
+
+    # Fit a TBATS model to the gas data
+    fit <- tbats(gas)
+
+    # Forecast the series for the next 5 years
+    fc <- forecast(fit, h=60)
+
+    # Plot the forecasts
+    autoplot(fc)
+
+<img src="Forecasting-in-R_files/figure-markdown_strict/unnamed-chunk-68-2.png" style="display: block; margin: auto;" />
+
+
+    # Record the Box-Cox parameter and the order of the Fourier terms
+    lambda <- 0.082
+    K <- 5
