@@ -1,0 +1,438 @@
+---
+title: "Forecasting in R"
+author: "Koji Mizumura"
+date: "`r Sys.Date()`"
+output:
+  md_document:
+    
+  rmdformats::readthedown:
+    number_sections: yes
+    fig_height: 10
+    fig_width: 14
+    highlight: kate
+    toc_depth: 3
+    # css: style.css
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    number_sections: yes
+    section_divs: yes
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+always_allow_html: yes
+---
+
+```{r setup4, include=FALSE}
+# Set global knitr chunk options
+knitr::opts_chunk$set(
+  fig.align = "center",
+  # fig.height = 4.5,
+  error = FALSE,
+  message = FALSE, 
+  warning = FALSE, 
+  collapse = TRUE,
+  cache = TRUE
+)
+```
+
+```{r}
+
+pacman::p_load(tidyverse, forecast, magrittr, tidymodels, readxl)
+
+# library(tidyverse)
+# library(forecast)
+# library(magrittr)
+# library(tidymodels)
+# library(readxl)
+```
+
+# Forecasting Product Demand in R
+
+## Forecasting demand with time series
+### Importing data
+
+There are a lot of ways to import data into R! Once the data is imported into R, we need to transform the data into an xts object to help with analysis. These xts objects are so much easier to plot and manipulate.
+
+In this exercise you are going to create a date index and then turn your data into an xts object. Your data has been imported for you into an object called bev.
+
+```{r}
+# Load xts package 
+# pacman::p_install("xts")
+library(xts)
+
+# Create the dates object as an index for your xts object
+dates <- seq(as.Date("2014-1-19"), length = 176, by = "weeks")
+
+bev <- read_csv("data/Bev.csv")
+
+# Create an xts object called bev_xts
+bev_xts <- xts(bev, order.by = dates)
+```
+
+## Plotting / visualizing data
+
+In the videos we are working with the mountain region of the beverage data. Here in the exercises you will be working with the metropolitan areas of the state to forecast their products.
+
+There are three products in the metropolitan areas - high end, low end, and specialty. The specialty product is not sold any where else in the state. The column names for the sales of these three products are MET.hi, MET.lo, and MET.sp respectively. Before looking at each one of these products individually, let's plot how total sales are going in the metropolitan region. The object bev_xts has been preloaded into your workspace.
+
+```{r}
+# Create the individual region sales as their own objects
+MET_hi <- bev_xts[,"MET.hi"]
+MET_lo <- bev_xts[,"MET.lo"]
+MET_sp <- bev_xts[,"MET.sp"]
+
+# Sum the region sales together
+MET_t <- MET_hi + MET_lo + MET_sp
+
+# Plot the metropolitan region total sales
+plot(MET_t)
+```
+
+### ARIMA Time Series 101
+
+To forecast time series data - it starts from foundational models (ARIMA models).
+
+1. AutoRegressive Models
+
+  - Depend only on previous values - called lags
+  - Long-memory models - effect slowly dissipates
+
+2. Moving Average
+  - Depend only on previous shocks or errors
+  - Short-memory models - effects quickly dissapear completely 
+  
+3. Integrated: stationarity
+  - Does the data have a dependence across times?
+  - How long does this dependence last? 
+
+__Statonarity__: 
+  - Effect on an observation dissipates as time goes on
+  - Best long term prediction is the mean of the series
+  - Commonly achieved through differencing 
+  
+### `auto.arima()` function
+
+We can use the auto.arima function to help us automatically select a good starting model to build. Your regional sales data summed up for all products in the metropolitan region is loaded in your workspace as the MET_t object. We are going to use the index function to help with these dates.
+
+```{r}
+# Split the data into training and validation
+MET_t_train <- MET_t[index(MET_t) < "2017-01-01"]
+MET_t_valid <- MET_t[index(MET_t) >= "2017-01-01"]
+
+# Use auto.arima() function for metropolitan sales
+auto.arima(MET_t_train)
+```
+
+### Forecasting and Evaluating 
+
+Forecasting is 
+- goal of most time series models
+- models use past values or shocks to predict the future
+- Pattern recognition followed by pattern repetition
+
+What time series models are doing is essentially finding the pattern or signal in the data. 
+
+The forecast function in R makes forecasting time series models easy to do. First, create an xts object from the forecast, called the "mean" attribute of your forecast object, then the plot function for the validation and the line for the forecast.
+
+```{r}
+forecast_M_t <- forecast(MET_t_train, h = 22)
+
+for_dates <- seq(as.Date("2017-01-01"), length = 22, by = "weeks")
+for_M_t_xts <- xts(forecast_M_t$mean, order.by = for_dates)
+
+plot(MET_t_valid, main = 'Forecast Comparison')
+lines(for_M_t_xts, col = "blue")
+
+```
+
+To evaluate forecasts
+
+two common measures of accuracy
+
+1. Mean Absolute Error (MAE)
+The MAE is the average measure of how far away, in absolute terms, your prediction is from the actual value.
+
+This is easily measured in the scale of the data. 
+
+$$
+\frac{1}{n} \Sigma |Y_t - \hat{Y_t}|
+$$
+
+2. Mean Absolute Percentage Error (MAPE)
+The MAPE is the average measure of how far away in absolute PERCENTAGE terms, your prediction is from the actual value.
+
+This makes the prediction not dependent on scale.
+
+$$
+\frac{1}{n} \Sigma |\frac{Y_t - \hat{Y_t}}{Y_t}|*100
+$$
+
+```{r}
+for_M_t <- as.numeric(forecast_M_t$mean)
+v_M_t <- as.numeric(MET_t_valid)
+MAE <- mean(abs(for_M_t - v_M_t))
+MAPE <- 100*mean(abs((for_M_t - v_M_t)/v_M_t))
+```
+
+### Forecast functions
+
+Previously you built a model and saved it as MET_t_model. Now we need to forecast out the values of this model for the first 5 months of 2017.
+
+```{r}
+# Forecast the first 22 weeks of 2017
+forecast_MET_t <- forecast(MET_t_train, h = 22)
+
+# Plot this forecast #
+plot(forecast_MET_t)
+```
+
+### Calculating MAPE and MAE
+
+You previously calculated the forecast for the metropolitan region total sales and stored it in the object `forecast_MET_t`. You also have your validation data set stored in the object `MET_t_valid` that covers the same first 22 weeks of 2017. Let's see how good your forecast is!
+
+```{r}
+# Convert to numeric for ease
+for_MET_t <- as.numeric(forecast_MET_t$mean)
+v_MET_t <- as.numeric(MET_t_valid)
+
+# Calculate the MAE
+MAE <- mean(abs(for_MET_t - v_MET_t))
+
+# Calculate the MAPE
+MAPE <- 100*mean(abs(for_MET_t-v_MET_t)/v_MET_t)
+
+# Print to see how good your forecast is!
+print(MAE)
+print(MAPE)
+```
+
+### Visualizing forecasts
+
+Your forecast seemed to be off by over 18% on average. Let's visually compare your forecast with the validation data set to see if we can see why. Your workspace has your forecast object `forecast_MET_t` and validation data set `MET_t_valid` loaded for you. Don't forget your validation is 22 weeks long!
+
+```{r}
+# Convert your forecast to an xts object
+for_dates <- seq(as.Date("2017-01-01"), length = 22, by = "weeks")
+for_MET_t_xts <- xts(forecast_MET_t$mean, order.by = for_dates)
+
+# Plot the validation data set
+plot(MET_t_valid, main = 'Forecast Comparison', ylim = c(4000, 8500))
+
+# Overlay the forecast of 2017
+lines(for_MET_t_xts, col = "blue")
+```
+
+### Confidence Intervals for Forecast
+
+Your forecast object `forecast_MET_t` not only has the forecast, but also margin of error calculations for the forecast called confidence intervals. These confidence intervals show us a wiggle room on our forecasts since no forecast is ever perfect.
+
+The forecast was stored as the object `forecast_MET_t$mean`. The upper and lower limit of this interval is stored similarly. The first column of the upper confidence interval is the 80% confidence interval and can be accessed via `forecast_MET_t$upper[,1]`. The second column is the 95% confidence interval. To get the 
+lower limit replace the word upper with lower.
+
+```{r}
+# Plot the validation data set
+plot(MET_t_valid, main = 'Forecast Comparison', ylim = c(4000, 8500))
+
+# Overlay the forecast of 2017
+lines(for_MET_t, col = "blue")
+
+# Convert the limits to xts objects
+lower <- xts(forecast_MET_t$lower[,2], order.by = for_dates)
+upper <- xts(forecast_MET_t$upper[,2], order.by = for_dates)
+
+# Adding confidence intervals of forecast to plot
+lines(lower, col = "blue", lty = "dashed")
+lines(upper, col = "blue", lty = "dashed")
+```
+
+## Components of demand
+### Price elasticity
+
+Now that you know about price elasticities, let's see how elastic prices are for the high end product in the metropolitan region! Grand training and validation data sets have already been created for you and are stored in the objects `bev_xts_train` and `bev_xts_valid`.
+
+You already have the sales for the high end product loaded in the workspace as MET_hi. You first need to extract the prices out of the `bev_xts_train` object. The column names for prices in the `bev_xts_train` object is `MET.hi.p.`
+
+```{r}
+# Save the prices of each product
+bev_xts
+l_MET_hi_p <- as.vector(log(bev_xts[,"MET.hi.p"]))
+
+# Save as a data frame
+MET_hi_train <- data.frame(as.vector(log(MET_hi)), l_MET_hi_p)
+colnames(MET_hi_train) <- c("log_sales", "log_price")
+
+# Calculate the regression
+model_MET_hi <- lm(log_sales ~ log_price, data = MET_hi_train)
+```
+
+### Interpret results from elasticity
+
+You have built a regression model saved as the object `model_MET_hi`. But what do the results tell us? Use the console to investigate the results of the regression model and the coefficients from the regression. Do you have an elastic or inelastic product in the metropolitan region?
+
+### Visualize holiday / promotion effects
+
+Maybe there are certain times of year that the metropolitan region has higher sales than other times. Let's visualize the sales of high end product to see if there may be some seasonal effects. Your product sales are saved in your workspace as `MET_hi`. The prices of your product is saved in your workspace as `MET_hi_p`.
+
+```{r}
+# Plot the product's sales
+plot(MET_hi)
+
+# Plot the product's price
+plot(l_MET_hi_p)
+```
+
+### Create holiday / promotional effect variables
+We saw some notion of seasonality in the previous exercise, but let's test to make sure that something actually is there. Your bosses think that their products would be more desired around the weeks of Christmas, New Year's, and Valentine's Day. The marketing department also mentions that they have been running promotional deals the week before Mother's Day the previous 5 years. Let's create a binary indicator variable for New Year's!
+
+```{r}
+# Create date indices for New Year's week
+n.dates <- as.Date(c("2014-12-28", "2015-12-27", "2016-12-25"))
+
+# Create xts objects for New Year's
+newyear <- as.xts(rep(1, 3), order.by = n.dates)
+
+# Create sequence of dates for merging
+dates_train <- seq(as.Date("2014-01-19"), length = 154, by = "weeks")
+
+# Merge training dates into New Year's object
+newyear <- merge(newyear, dates_train, fill = 0)
+
+```
+
+### Regression for holiday / promotional effects
+Now that you have created the New Year's indicator variable, let's see if it is significantly different than the usual sales pattern using regression.
+
+Your data.frame with log of sales and log of prices is saved in your workspace as MET_hi_train. Your New Year's variable is stored as newyear.
+
+```{r}
+# Create MET_hi_train_2 by adding newyear
+MET_hi_train
+newyear
+MET_hi_train_2 <- data.frame(MET_hi_train, as.vector(newyear))
+colnames(MET_hi_train_2)[3] <- "newyear"
+
+# Build regressions for the product
+model_MET_hi_full <- lm(log_sales ~ log_price + newyear, data = MET_hi_train_2)
+```
+
+### Forecasting with regression
+8jjjjjjjjjjjjjjjjjj
+
+## Blending regression with time series
+## Hierarchical forecasting 
+
+
+# Introduction to TensorFlow by R
+
+## Introduction 
+
+TensorFlow 
+
+- created by Google Brain
+- open source library that uses
+  - PYthon as a front-end API
+  - C++ for application execution
+- Particular popular for:
+  - digit classification
+  - RNN
+  - NLP
+
+TensorFlow creates flow-through graphs which describe how data move through processing nodes.
+
+A dataflow graph for the following equation:
+
+$$
+(A*B) + C
+$$
+
+```{r}
+library(tensorflow)
+
+install_tensorflow()
+
+tensorflow::tf_config()
+# To call up your configuration details - use
+tf_config()
+```
+
+To create any computation in TensorFlow, you mast first launch a session. 
+
+```{r}
+firstsession <-  tf$Session()
+# to start session
+print(firstsession$run())
+
+# to complete a session
+firstsession$close()
+
+library(h2o)
+h2o.init()
+```
+
+## TensorFlow Syntax, Variables and Placeholders
+
+### Constants are: 
+- well constant
+- creates nodes whose values do not change
+
+We can create constants using `tf$constant()`.
+
+`tf$constant()` uses several basic parameters including:
+
+- value
+- dtype = `None`
+- shape = `None`
+
+For example, in the last lesson we used:
+
+```{r}
+HiThere <- tf$constant("Hie DataCamp Student!")
+a = tf$constant(2)
+```
+
+### Variables
+TensforFlow variables 
+- may change over the course of your session
+- `tf$Variable("initial value","optinal name")`
+
+For example:
+```{r}
+EmptyMatrix <- tf$Variable(tf$zeroes(shape(4,3)))
+```
+
+where `tf$zeroes()` fills in the matrix with 4 rows and 3 columns of zeroes. 
+
+### placeholders 
+
+- Similar to variables, but will assign 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
