@@ -1,0 +1,689 @@
+---
+title: "Feature Engineering in R"
+output:
+  md_document:
+  rmdformats::readthedown:
+    number_sections: yes
+    fig_height: 10
+    fig_width: 14
+    highlight: kate
+    toc_depth: 3
+    # css: style.css
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    number_sections: yes
+    section_divs: yes
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+always_allow_html: yes
+---
+
+```{r setup4, include=FALSE}
+# Set global knitr chunk options
+knitr::opts_chunk$set(
+  fig.align = "center",
+  # fig.height = 4.5,
+  error = FALSE,
+  message = FALSE, 
+  warning = FALSE, 
+  collapse = TRUE,
+  cache = TRUE
+)
+```
+
+```{r}
+pacman::p_load(tidyverse, caret)
+```
+
+
+# Create features from categorical data
+
+Representing raw predictors by
+
+- adjusting raw features 
+- Combining raw features 
+- Decomposing raw features into meaningful subsets
+
+Useful function - `mutate`, `ifelse()`, `caret::dummyVars()`
+
+## One-hot encoding 
+
+The discipline_logs dataset is loaded in your workspace. These data contain information on student discipline events that occurred during a school day. It contains an assortment of variable types including string variables with various categories. Since most machine learning algorithms cannot interpret this kind of information, we have to encode them as numerical features. One common practice previously discussed is one-hot encoding, in which each row of the column contains zeros, except for the rows that correspond to the specific category, which is set to one.
+
+```{r}
+# Load dplyr
+library(dplyr)
+
+discipline_logs <- discipline_logs %>%	
+	mutate( 
+  		# Create male column
+  		male = ifelse(gender == "Male", 1,0),
+
+  		# Create female column
+  		female = ifelse(gender == "Female", 1, 0))
+```
+
+## Binning encoding: content driven 
+
+A large number of distinct categories in a variable - looking for similar caregories. 
+
+Existing categories into four categories - public, private, self-employed and unemployed.
+
+```{r}
+adult_incomes %>% 
+  select(workclass) %>% 
+  table()
+
+# binning encoding 
+
+adult_incomes %>% 
+  mutate(new_workclass = 
+           case_when(workclass == "Federal-gov" ~ "public",
+                     workclass == "Local-gov" ~ "public"
+                     workclass == "State-gov" ~ "public",
+                     workclass == "Self-emp-inc" ~ "self_empl",
+                     workclass == "Self-emp-not-inc" ~ "self_empl",
+                     workclass == "Without-pay" ~ "unemployed",
+                     workclass == "Never-worked" ~ "unemployed",
+                     TRUE ~ as.character(workclass)))
+
+adult_incomes %>% 
+  select(workclass) %>% 
+  table()
+```
+
+```{r}
+adult_incomes %>% 
+  mutate(public  = ifelse(new_workclass == "public", 1, 0),
+         primate = ifelse(new_workclass == "Private", 1, 0),
+         self_emp = ifelese(new_workclass == "self_empl", 1,0),
+         unemployed == ifelse(new_workclass == "unemployed", 1, 0))
+
+```
+
+## Leveraging content knowledge
+
+We have prior knowledge that the type of school a student oges to, elementary school, middle school or high school is more informative than the student's specific grade.
+
+Let's create a feature that captures the school types using the grade column, where elementary_school contains 1st through 5th grade, middle_school contains 6th through 8th grade, and high_school contains 9th through 12th grade.
+
+```{r}
+# Create a new column with the proper string encodings
+discipline_logs_new <-  discipline_logs %>%
+	mutate(school_type = 
+           	case_when(grade >= 1 & grade <= 5 ~ "elementary_school",
+                      grade >= 6 & grade <= 8 ~ "middle_school",
+                      grade >= 9 & grade <=  12 ~ "high_school"))
+
+# Look at a table of the new column 
+discipline_logs_new %>%
+	select(school_type) %>%
+	table() 
+```
+
+## Converting new categories to numeric
+
+You reduced the 12 category variable into three distinct categories by creating a new `school_type` column, which contains a string encoding of the school type with the ranges of grades. Now, use one-hot encoding to represent each category independently.
+
+```{r}
+discipline_logs_new <- discipline_logs_new %>%	
+	mutate( 
+  			# Create elem_sch column
+  			elem_sch = ifelse(school_type == "elementary_school", 1, 0),
+
+ 			# Create mid_sch column
+  			mid_sch = ifelse(school_type == "middle_school", 1, 0),
+
+  			# Create high_sch column
+  			high_sch = ifelse(school_type == "high_school", 1, 0))
+```
+
+
+## Binning encoding: data driven 
+
+The encoding procedures we have disuseed work well on categorical data, however, one-hot encoding for a variable with thousands of categories will create a thousand or more new columns, and will be complicated even if you combine similar categories based on contextual information.
+
+Let's discuss data-driven approaches to reducing the space of categorical variables and creating meaningful features.
+
+### Educational lavels
+
+```{r}
+adult_incomes %>% 
+  select(education) %>% 
+  table()
+```
+
+There are 16 distinc categories we want to incoporate into our model that predicts income levels above or below 50,000 USD. We want to reduce these categories in a meaningful way, leveraging the outcomes associated with these levels. 
+
+One approach is to look at the propotions of each category with respect to the income, which is the outcome variable.
+
+```{r}
+ed_table <- adult_incomes %>% 
+  select(education, income) %>% 
+  table()
+
+prop_results <- as_tibble(prop.table(ed_table, 1))
+```
+
+We can combine `pro-dot-table()` with the `table()` function.The `prop-dot-table()` takes atable with cells and divides each cell value by the sum of the cells.
+
+We order the propotions that correspond to making over 50,000 USD a year using the arrange. We can use this information to create meaningful categories. 
+
+```{r}
+prop_results %>% 
+  filter(income == ">50K") %>% 
+  arrange(n)
+```
+
+```{r}
+inner_join(adult_incomes, prop_results,
+           by = "education" = "ed_span") %>% 
+  select(education, income, n) %>% 
+  head()
+```
+
+We create a new column contaning the new mappings, where the low education categorry contains eight categories from preschool to 12th grade, the medium categorry contains four categories after graduating high school, and the high education level contains a bachelors degree and more. 
+
+```{r}
+adult_incomes %>% 
+  mutate(education_levels = 
+           case_when(prop >= 0 & prop <.10 ~ "low_education",
+                     prop >= 0.10 & prop < .30 ~ "medium_education",
+                     prop >= .30 & prop <1 ~ "high education"))
+```
+
+## Categorical proportions by outcome
+
+The grade variable in the `discipline_logs` dataset contains 12 distinct categories we wish to incorporate into our model that predict whether or not a student received a disciplinary action. We want to reduce these 12 categories in a meaningful way that leverages the outcomes associated with these grade levels. The discipline variable indicates whether a student received disciplinary action.
+
+```{r}
+# Create a table of the frequencies
+discipline_table <- discipline_logs %>%
+						select(grade, discipline) %>%
+						table() 
+
+# Create a table of the proportions
+prop_table <- prop.table(discipline_table, 1)
+```
+
+## Reducing categories using outcome
+
+Previously, we determined the proportions of discipline infractions for all 12 grade levels. We can create a data table, `dgr_prop`, containing these grade proportions mapping with `grade` and `proportion` columns. The proportions correspond to a student receiving disciplinary action during that grade.
+
+```{r}
+# Combine the proportions and discipline logs data
+discipline <- inner_join(discipline_logs, dgr_prop, by = "grade")
+
+# Display a glimpse of the new data frame
+glimpse(discipline)
+
+# Create a new column with three levels using the proportions as ranges
+discipline_ed <- discipline %>%
+   mutate(education_levels = 
+      case_when(proportion >= 0 & proportion < .20 ~ "low_grade",
+                proportion >= .20 & proportion < .25 ~ "middle_grade", 
+                proportion >= .25 & proportion < 1 ~ "high_grade"))```
+```
+
+# Creating features from numeric data 
+## Visualizing the distribution
+
+The `online_retail` dataset contains information about online sales, including how many items were purchased per transaction.
+
+```{r}
+# Summarize the Quantity variable
+online_retail %>%
+  select(Quantity)%>%
+  summary()
+
+# Create a histogram of the possible variable values
+ggplot(online_retail, aes(x = Quantity)) + 
+  geom_histogram(stat = "count")
+```
+
+## Creating uniform buckets from a distribution
+
+We can see that the `Quantity` variable ranges from 1 to 50, meaning individuals buy between 1 and 50 items per transaction.
+
+```{r}
+# Create a sequence of numbers to capture the Quantity range
+seq(1, 50, by = 5)
+
+# Create a sequence of numbers to capture the Quantity range
+# Use the cut function to create a variable quant_cat
+online_retail <- online_retail %>% 
+  mutate(quant_cat = cut(Quantity, breaks = seq(1, 50, by = 5)))
+
+# Create a table of the new column quant_cat
+online_retail %>%
+	select(quant_cat) %>%
+	table()
+
+# Create new columns from the quant_cat feature
+head(model.matrix(~ quant_cat -1, data = online_retail))
+```
+
+## Binning numerical data using `quantiles`
+
+The binning procedure from before is useful when your range of values is somewhat evenly distributed, so the new categorical features have a balanced representation of individuals in your data.
+
+```{r}
+adult_incomes %>% 
+  mutate(age_cat = 
+           cut(age, breaks = seq(!5,95, by=10))) %>% 
+  select(age_cat) %>% 
+  table()
+```
+
+One drawback of using equity spaced buckets is that you will create a new feature along with all possible values of the distribution.
+
+That means that even age ranes that are not the common, like anything above the age of 55, will be represented by three new fetures. 
+
+A better way to cature the distribution is by creating buckets that contain the same number of individuals along the distribution. This is known as __quantile bucketing__. 
+
+For example, we can divide age into 5 buckets, each containing about the same number of individuals. We use `mutate()` to create a new column, age-underscore-q and the `ntile()` function on the age variable to specify that we want five buckets.
+
+```{r}
+# Quantile bucketin
+adult_incomes %>% 
+  mutate(age_q = ntile(age,5)) %>% 
+  select(age_q) %>% 
+  table()
+```
+
+These new buckets encompass both narrower and wider ranges in the age variable distribution and capture the same number of individuals per bucket.Notice that each bucket has roughly the same amount of individuals, and each bucket covers a different range of years.
+
+```{r}
+# Variable age ranges
+
+adult_incomes %>% 
+  mutate(age_q = ntile(age, 5)) %>% 
+  group_by(age_q, age) %>% 
+  summarise(n = n()) %>% 
+  group_by(age_q) %>% 
+  summarize(
+    total   = sum(n),
+    min_age = min(age),
+    max_age = max(age)
+  )
+
+```
+
+Now that we have our column with coded buckets 1 through 5, we can apply one-hote encoding. 
+
+```{r}
+dmy_data <- model.matrix(
+  ~age_q - 1, data = adult_incomes)
+
+head(dmy_data)
+```
+
+If we wanted to include an outcome variable, we indicate it on the left side. 
+We use minus one to specify that we want all the encodings and pass our income data frame. 
+
+## Balanced bucketing 
+
+The `Quantity` variable in the `online_retail` dataset has a very skewed distribution. That is, most individuals buy 1 to 5 items, but a small number buy close to 50. How can we better capture this type of distribution buckets?
+
+```{r eval=FALSE}
+online_retail %>% 
+    select(quant_cat) %>%
+    table()
+```
+
+```{r}
+# Break the Quantity variable into 3 buckets
+online_retail <- online_retail %>% 
+  mutate(quant_q = ntile(Quantity, 3))
+
+# Use table to look at the new variable
+online_retail %>%
+  select(quant_q) %>%
+  table()
+```
+
+
+## Full matrix encoding 
+
+You created a feature that captures the age ranges. You have to numerically encode these features in a way that they can be incorporated into your model.  Now, let's assume you are going to work with a linear model that requires a full rank matrix for these one-hot encoded features.
+
+```{r}
+# Use table to look at the new variable
+online_retail %>%
+  select(quant_q) %>%
+  table()
+
+# Specify a full rank representation of the new column
+head(model.matrix(~quant_q, data = online_retail))
+```
+
+
+## Date and time feature extraction 
+
+Use `lubridate` package for its variable conversion.
+
+```{r}
+glimpse(online_retail)
+```
+
+## Converting string types to date types
+
+The `discipline_logs` data contains a string variable, `timestamp`, of the time and day the different discipline events occurred.
+
+```{r}
+# Load lubridate
+library(lubridate)
+
+# Look at the column timestamp
+discipline_logs %>%
+	select(timestamp) %>%
+	glimpse()
+
+# Assign date format to the timestamp_date column
+discipline_logs %>%
+	mutate(timestamp_date = ymd_hms(timestamp))
+
+```
+
+## Converting dates 
+
+Now that you have converted your event variable into its proper date format. You want to extract some date and time information to help you create some potential features.
+
+```{r}
+# Create new column dow (day of the week) 
+discipline_logs <- discipline_logs %>% 
+  mutate(dow = wday(timestamp_date, label = T))
+
+head(discipline_logs)
+```
+
+```{r}
+# Create new column hod (hour of day) 
+discipline_logs <- discipline_logs %>% 
+  mutate(hod = hour(timestamp_date))
+
+head(discipline_logs)
+```
+
+## Visualize time features
+
+You previously created features for the hour of the day that discipline incidents happen hod. In feature engineering, we are often interested in deriving insights from new features through exploration and visualization. For example we could be interested in finding out if there are certain times in the day that incidents happen the most and a simple histogram could answer such question.
+
+# Transforming numerical features 
+## Box and Yeo Transformations 
+
+Skew data - power transformation to change original distribution
+
+Box-Cox: maximum likelihood estimation to estimate a transformation parameter, or lambda that nicely maps on to special cases of power transformations
+
+Box-Cox transformation works well when you have variables that do not contain zero and are always positive. 
+
+```{r}
+ggplot(online_retail, aes(x=Quantity))+
+  geom_density()
+```
+
+By looking at our skewed quantity variable, we can see the most values are between 1 and 10 items purchased. If we use the Box-Cox transformation, 
+
+## Box-Cox Transformations (Exercise)
+
+As you have learned you can improve the utility of a variable in a model by leveraging variable transformations like the Box-Cox transformation for positive variable values. For example, the Pokemon dataset poke_df contains several numeric variables of the characteristics of different Pokemon attributes. Two variables collected on defensive efficiency are `defense` and `speed`. Both are positive and do not contain zero.
+
+```{r}
+# Select the variables
+poke_vars <- poke_df %>%
+	select(defense, speed) 
+
+# Perform a Box-Cox transformation
+processed_vars <- preProcess(poke_vars, method = c("BoxCox"))
+
+# Use predict to transform data
+poke_df_pred <- predict(processed_vars, poke_df)
+
+# Plot transformed features
+ggplot(poke_df_pred, aes(x = defense)) + 
+  geom_density(aes(x=defense))
+
+ggplot(poke_df_pred, aes(x = speed)) + 
+  geom_density(aes(x=speed))
+```
+
+## Yeo-Johnson transformations
+
+You have previously transformed variables using the Box-Cox transformation. The Yeo-Johnson transformation is similar but can handle a wider range of variable types. For example, the bank marketing dataset `bank_df` contains several numeric variables that contain zero as well as both positive and negative values that are used to determine if a banking client will enroll in term deposits. Two variables collected are the yearly average `balance` of an individual balance and how long a customer is spoken to by a marketing agent `duration`, measured in seconds.
+
+```{r}
+# Select both variables
+bank_vars <- bank_df %>%
+	select(balance, duration)
+    
+# Perform a Yeo-Johnson transformation 
+processed_vars <- preProcess(bank_vars, method = c("YeoJohnson"))
+
+# Use predict to transform data
+bank_df_pred <- predict(processed_vars, bank_df)
+
+# Plot transformed features
+ggplot(bank_df_pred) +
+  geom_density(aes(x=balance))
+
+ggplot(bank_df_pred) + 
+  geom_density(aes(x=duration))
+
+```
+
+## Normalization techniques: scaling and centering 
+
+## Scaling
+
+Often, you will want to change the scale of numeric variables to improve the performance of the model or algorithm you are using. A common approach involves changing the ranges of variables to fit between 0 and 1. This is useful when you have variables that have little or no outliers and that have a balanced representation across all values.
+
+```{r}
+# Create a scaled new feature scaled_hp 
+poke_df <- poke_df %>%
+	mutate(scaled_hp = (hp - min(hp)) / 
+   (max(hp) - min(hp)))
+
+# Summarize both features
+poke_df %>% 
+	select(hp, scaled_hp) %>%
+	summary()
+```
+
+## Mean centering
+
+Centering features takes the mean of each feature and subtracts it from each row value within the original variable. This allows for values that are at the mean to be 0 and any deviation from that as units away from the mean.
+
+```{r}
+# Use mutate to create column attack_mc
+poke_df <- poke_df %>%
+  mutate(attack_mc = attack - mean(attack))
+```
+
+## Caret mean centering
+
+In practice, you might want to center multiple numerical variables at once. Using the `preProcess()` function in the `caret` package, is one way to mean center on multiple columns at once.
+
+```{r}
+# Select variables 
+poke_vars <- poke_df %>%
+  select(attack, spatk, spdef)
+    
+# Use preProcess to mean center variables
+processed_vars <- preProcess(poke_vars, method = c("center"))
+
+# Use predict to include tranformed variables into data
+poke_df <- predict(processed_vars, poke_df)
+
+# Summarize the three new column scales
+poke_df %>% 
+	select(attack, spatk, spdef) %>%
+	summary()
+```
+
+## Z-score standardization
+
+z-score standardization is useful when 
+- you have some outliers
+- measurements in different scales of magnitude
+
+Mean centering canges the values but not the scale of variables.
+Z-score standardization changes the scale to unit variance 
+
+## Standardization one variable case
+
+The Pokemon dataset contains many numeric variables that are measured in different scales and that have a long tail to one direction signifying the potential presence of outliers. One of those variables is speed, which measures the speed of different Pokemon.
+
+```{r}
+# Standardize Speed
+poke_df <- poke_df %>% 
+	mutate(z_speed = (speed - mean(speed))/
+  		sd(speed))
+
+# Summarize new and original variable
+poke_df %>% 
+	select(speed, z_speed) %>%
+	summary()
+```
+
+## Caret standardization
+
+Often, we will need to standardize multiple variables at once. The Pokemon dataset contains many numeric variables that are measured in different scales, including `attack`, `defense`, `spatk` and `spdef`.
+
+```{r}
+# Select variables 
+poke_vars <- poke_df %>%
+  select(attack, defense, spatk, spdef)
+
+# Create preProcess variable list 
+processed_vars <- preProcess(poke_vars, method = c("scale", "center"))
+
+# Use predict to assign standardized variables
+poke_df <- predict(processed_vars, poke_df)
+
+# Summarize new variables
+poke_df %>%
+  select(attack, defense, spatk, spdef) %>%
+  summary()
+```
+
+# Advanced methods 
+## Feature crossing
+
+Feature crossing - consider how to combine differenty types of predictors to help us make better prediction in the models.
+
+We can use the `dummyVars()` function from the caret package, to do most of the heavy lifting. 
+
+```{r eval=FALSE}
+
+dmy <- dummyVars( ~ gender::infraction, data = discipline_logs) 
+out_df <- predict(Dmy, newdata = discipline_logs)
+glimpse(out_df)
+```
+
+With many categories, we create moire sparse features. With traditional regression, you need to have some knowledge about what features have an interaction and specify them explicitly. 
+
+Having prior knowledge or a strong understanding of how your predictor variables might be related helps determine what predictors would benefit from crossing. 
+
+In practice, when dealing with large datasets with many possible interactions, prior knowledge might not be as helpful. Luckily, there are algorithms and other methods designed to helpt sort through which features interact overall, but we will have to explore which methods best fit the needs. 
+
+## Exploring features visually
+
+Before doing any crossing, it is always useful to explore and visualize your features in order to determine if your intuition makes sense, or to simply understand how these two features are related to each other.
+
+```{r}
+# Group the data and create a summary of the counts
+adult_incomes %>% 
+  group_by(occupation, gender) %>%
+  summarize(n = n()) %>%
+  # Create a grouped bar graph 
+  ggplot(., aes(occupation, n, fill = gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Exploring potential crosses 
+
+In practice, feature crosses are done automatically when specified internally by algorithms. However, it is important to fully understand what happens when we cross two categorical features. The adult_incomes data set contains categorical variables for `gender` and `occupation` type.
+
+```{r}
+# Create a table of the variables of interest
+adult_incomes %>% 
+	select(gender, occupation) %>%
+	table()
+```
+
+## Crossing two categorical features
+
+Feature crossing is a very useful technique that helps algorithms take into account relationships between features in your data set. Using the adult_incomes data set, perform a feature cross between gender and occupation.
+
+```{r}
+# Create a feature cross between gender and occupation 
+dmy <- dummyVars( ~ gender:occupation, data = adult_incomes)
+
+# Create object of your resulting data frame
+oh_data <- predict(dmy, newdata = adult_incomes)
+
+# Summarize the resulting output
+summary(oh_data)
+```
+
+## Principal component analysis 
+
+PCA takes in transformed numerical features and creates components of the linear combinations of the original numerical features. For this exercise we will be using the Pokemon data set `poke_df` composed of 12 features of Pokemon types. Once you preprocess the data, you can continue with PCA.
+
+```{r}
+poke_x <- poke_df %>% 
+  select(hp, attack, defense, spatk, spdef, speed)
+
+poke_pca <- prcomp(poke_x,
+                    center = TRUE,
+                    scale. = TRUE) 
+```
+
+Greatness! Even if you get the same number of components as there are features, you will only use a subset of those!
+
+## Proportion of variance by PCA 
+
+PCA results can be visualized in a variety of ways. It is important to choose visualizations that cater to your specific task. For example, we are mainly interested in learning how the components summarize the variation in relation to the overall number of variables. Fewer components means that you are reducing autocorrelations in your data that might be counter to having good predictive models. A good way to explore this is to focus on the proportion of variance explained. A tibble called prop_var has been created for you with the standard deviation from the output list object poke_pca.
+
+```{r}
+# Calculate the proportion of variance
+prop_var <- prop_var %>%
+  mutate(pca_comp = 1:n(),
+  		pcVar = sdev^2, 
+        propVar_ex = pcVar/sum(pcVar))
+```
+
+## Visualizing results with a scree plot
+Previously, you used the PCA results poke_pca to add the following columns to prop_var: pca_comp, which enumerates each column in the table, pcVar, which contains the variance for each principal component, and propVar_ex, which contains the proportion of the variance explained by each component.
+
+```
+prop_var <- prop_var %>%
+  mutate(pca_comp = 1:n(),
+           pcVar = sdev^2, 
+         propVar_ex = pcVar/sum(pcVar))
+```
+
+Using these results, let's create a plot to better visualize what is explained by each component
+
+```{r}
+# Create a plot of the components and proportion of variance
+ggplot(prop_var, aes(pca_comp, propVar_ex, group = 1)) + 
+  geom_line() +
+  geom_point()
+```
+
+## Visualizing components
+
+PCA results in theory can help you distinguish between multiple classes in an output variable. A good way to visualize this is to plot your components to determine how well they help you distinguish between classes in your output. The `poke_df` data frame and the PCA results `poke_pca` have been preloaded for you.
+
+```{r}
+# Create a plot of the first two components
+autoplot(poke_pca, data = poke_df, colour = 'type1')
+```
+
