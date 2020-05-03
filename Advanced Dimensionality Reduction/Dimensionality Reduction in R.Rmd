@@ -46,7 +46,7 @@ knitr::opts_chunk$set(echo = TRUE)
 pacman::p_load(tidyverse, caret)
 ```
 
-# Principal component a
+# Principal component analysis (PCA)
 ## The curse of dimensionality
 
 As the dimensionalities of the data frow, the feature space grows rapidy.
@@ -927,16 +927,123 @@ f_bfi_minres_unique <- sort(f_bfi_minres$uniquenesses, decreasing = TRUE)
 data.frame(f_bfi_minres_unique)
 ```
 
+The `mle` method extracts factors that optimally reproduce the population correlation matrix. 
 
+```{r}
+# MLE factor extraction
+f_bfi_mle <- fa(bfi_c, nfactors = 3, fm = "mle", rotate = "none")
 
+# Sorted communality of the f_bfi_mle
+f_bfi_mle_common <- sort(f_bfi_mle$communality, decreasing = TRUE)
 
+# create a dataframe for an improved overview
+data.frame(f_bfi_mle_common)
+```
 
+This method is based on the assumption that all variables are normally distributed. Different numbers of factors are employed iterative in order to maximize the likelihood of reproducing the population correlation matrix.
 
+As with the `f bfi minres`, I can create a sorted vector with the variables communalities.Comparing the two vectors, they are identified for the first 3 variables, with some considerable differences in the percentages of variance coverage by the 3 factor model, though.
 
+The next three variables are in different order and these can be considered valuable in the intepretation phase.
 
+## EFA with MinRes and MLE
 
+It is about time to turn our attention to creating our first EFA model object. As mentioned in the video, the default extraction method in the `fa()` function of the `psych` package is minimum residuals, minres. Recall that `fa()` takes as its main argument either a dataframe or a correlation matrix. In this exercise, your job is to manipulate the values of the function's default arguments and inspect the EFA model object's attributes to find out which of the variables load well on the 4 factors that we choose to extract below.
 
+For conducting EFA, you will use the correlation matrix hsq_polychoric, loaded in your workspace and calculated with the `mixedCor() `function on our initial dataset, hsq.
 
+```{r}
+# EFA with 4 factors.
+f_hsq <- fa(hsq_polychoric, nfactors = 4)
+
+# Inspect the resulting EFA object.
+str(f_hsq)
+
+# Use maximum likelihood for extracting factors.
+fa(hsq_polychoric, nfactors = 4, fm = "mle")
+```
+
+## EFA with Principal Axis Factoring
+
+Let's look at another popular extraction method, `Principal Axis Factoring (PAF)`. `PAF`'s main idea is that communality has a central role in extracting factors, since it can be interpreted as a measure of an item’s relation to all other items. An iterative approach is adopted. Initially, an estimate of the common variance is given in which the communalities are less than 1. After replacing the main diagonal of the correlation matrix (which usually consists of ones) with these estimates of the communalities, the new correlation matrix is updated and further replacements are repeated based on the new communalities until a number of iterations is reached or the communalities converge to a point that there is too little difference between two consecutive communalities.
+
+```{r}
+# Use PAF on hsq_polychoric.
+hsq_correl_pa <- fa(hsq_polychoric, nfactors = 4, fm = "pa") 
+
+# Sort the communalities of hsq_correl_pa.
+sort(hsq_correl_pa$communality, decreasing = TRUE) 
+
+# Sort the uniqueness of hsq_correl_pa.
+sort(hsq_correl_pa$uniqueness, decreasing = TRUE)
+```
+
+## Choosing the right number of factors
+
+Factorability tests do not indicate the approprite number of factors to retain. As KAiser once said, also in psych's manual, arriving at the right number of factors is not an easy task.
+
+Although it depends on our domain knowledge and intuition to achieve the most economical, still interpretable factor structue, there are a number of formal methods that help us to decide. 
+
+- Kaiser-Guttman criterion
+- the Scree test
+- Parallel test
+- Very simple-structured critrion (VSS)
+- Minimum Average Partial (MAP) criterion 
+
+The last two are advanced and implemented by the `vss()` function and are well-documented in `psych`'s cran pages. 
+
+Three of the five above-mentioned tests are performed in a compact graphical representation by the `fa()`. 
+
+`parallel()` accepts either the original data frame or the correlation matrix. In case you enter directly a correlation matrix, such as the `bfi_c` object that we created in the previous video, `fa`. 
+
+```{r}
+# Based on the minres method
+fa.parallel(bfi_c, n.obs = 200,
+            fa = "fa", fm = "minres")
+```
+
+- `parallel()` requires that you use the `n`.
+- `obs` argument that determines the number of observations in the original matrix. 
+- The `fm` argument sets the extraction method, `minres` and 
+- The `fa` argumnt ensures that only factors of an `EFA` and not principal components show up in the screenplot. 
+
+Zooming it on the graph, KAiser's line at 1 eigenvalue suggests that 4 factors should be retained, while parallel analysis recommends 5, since the 5th factor is above the randomlly generated data. 
+
+The scree test has the most ambiguous results; namely the decline in the slope can be traced in two spots; from the second to the third and from the fifth to the sixth, leaving the decision to the practitioner. 
+
+If we base our decision on `mle`, and keep the number of observations, steady to 200, the results are identical for both tests, as you can see. 
+
+```{r}
+# Based on the "mle" method
+fa.parallel(bfi_c, n.obs = 200,
+            fa = "fa", fm = "mle")
+```
+
+Last two steps 
+1. Rotate the extracted factors
+2. Interpret the results of te newly-extracted representation
+
+## Determining the number of factors
+
+Let's briefly visit the three tests for deciding on the number of factors to retain.
+
+In this exercise, you will use the correlation matrix, `hsq_polychoric`, computed based on the initial dataset, hsq, that has 1069 observations.
+
+```{r}
+# Check out the scree test and the Kaiser-Guttman criterion.
+scree(hsq_polychoric)
+
+# Use parallel analysis for estimation with the minres extraction method
+
+fa.parallel(hsq_polychoric, n.obs = 1069, fm = "minres", fa = "fa")
+
+# Use parallel analysis for estimation with the mle extraction method.
+fa.parallel(hsq_polychoric, n.obs = 1069, fm = "mle", fa = "fa")
+```
+
+# Advanced EFA
+
+## Interpretation of EFA and factor rotation
 
 
 
