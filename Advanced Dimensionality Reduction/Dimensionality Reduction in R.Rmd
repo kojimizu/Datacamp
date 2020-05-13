@@ -131,9 +131,7 @@ mtcars_pca <- PCA(mtcars)
 mtcars_pca$eig %>% 
   as.tibble()%>% 
   ggplot(aes(eigenvalue, `percentage of variance`))+
-  geom_col()+
-  hrbrthemes::theme_ipsum_ps()
-
+  geom_col()
 ```
 
 ## PCA with FactoMineR
@@ -268,8 +266,8 @@ fviz_cos2(
   choice = "ind",
   axes = 1,
   top=10
-)+
-  hrbrthemes::theme_ipsum_ps()
+)
+#  hrbrthemes::theme_ipsum_ps()
 ```
 
 ### Biplots
@@ -294,8 +292,8 @@ mtcars <- mtcars %>%
 fviz_pca_ind(mtcars_pca,
                label = "var",
                habillage = mtcars$cyl,
-               addEllipses = TRUE)+
-  hrbrthemes::theme_ipsum_tw()
+               addEllipses = TRUE)
+  # +hrbrthemes::theme_ipsum_tw()
 
 ```
 
@@ -545,7 +543,7 @@ Finally, it estimates the missing values by projecting the new coordinates of th
 
 # if (!requireNamespace("BiocManager", quietly=TRUE))
 #     install.packages("BiocManager")
-# BiocManager::install("pcaMethods")
+BiocManager::install("pcaMethods")
 
 library(pcaMethods)
 
@@ -837,9 +835,7 @@ The partial correlation for each pair of variables is comprised of the correlati
 
 ```{r}
 library(psych)
-
 KMO(bfi_c)
-
 ```
 
 If the variables shared common factor(s), then the partial correlations should be small and the KMO should be close to 1. If the difference is big, the common variance is considerable among the variables. 
@@ -1045,9 +1041,75 @@ fa.parallel(hsq_polychoric, n.obs = 1069, fm = "mle", fa = "fa")
 
 ## Interpretation of EFA and factor rotation
 
+In the EFA process, we have learnt the following steps.
 
+1. Check for data factorability
+2. Extract factors
+3. Choose the right number of factors to retain 
 
+In this chapter, we will follow up the remaining two steps. 
 
+4. Rotate factors
+5. Intepret the results
+
+Since the interpretation for unrotated EFA models can be very difficult, especially when they include extracted factors with many large loadings, factor rotation is a standard further step in EFA, being particualrly helpful in social and behavioural sciences. 
+
+The target is to reduce subjectivity in the interpretation as much as possible. As long as factor structure is not altered, meaning that the location of any variable in the factor space is not changed, thel location of the axes is irrelevant. 
+
+Rotation methods fall into two categories: orthogonal and oblique. 
+
+- Orthogonal methods
+  - Quartimax
+  - Equimax
+  - Varimax
+- Oblique methods 
+  - Direct Oblimin
+  - Promax 
+  
+ORthogonal methods produce uncorrelated factors whose axes maintain a 90 degrees angle between them, while oblique methods allow for slightly correlated factors. 
+
+The rule of thumb for choosing between the different rotation methods is that if the target factors are initially assumed to be correlated, then the oblique rotation should be employed. 
+
+On the other hand, if the factors are not related in any meaningful way, then an orthogonal rotation should be used. Commonly, it is recommended to use orthogonal rotation, since uncorrelated factors are easier to interpret. 
+
+Before that, let's have a better look at the EFA model that I have been working on throughout this chapter's video based on a subset of the `bfi` dataset.
+
+5 putable factors behind the 25 self report items:
+- Agreeableness (A1, A2, A3, A4, A5)
+- Conscientiousness (C1, C2, C3, C4, C5)
+- Extraversion (E1, E2, E3, E4, E5)
+- Neuroticism (N1, N2, N3, N4, N5)
+- Openess (O1, O2, O3, O4, O5)
+
+`f_bfi_minres` model to get an overview of our extracted unrotated factors. Although there are three clusters of variables, there is still considerable scatter that does not help us figure out what these two factors actually represent.
+
+Before plotting, it is necessary to determine the rotation choice in the `rotate` argument of the `fa()` function. 
+
+```{r}
+# Applying varimax 
+
+f_bfi_varimax <- fa(bfi_c,
+                    fm = "minres",
+                    nfactors = 5,
+                    rotate = "varimax")
+
+f_bfi_varimax
+```
+
+Let's build a new, rotated 5 facor EFA model with varimax rotation method. Without getting into technical details without getting into techincal details, varimax strives to maximize the variance within a factor such that larger loadings are increased and smaller ones are minimized. 
+
+The plot of the rotated factors is much cleaner, as the origin is in the middle of the points and represents the items more reliably, since their new coordinates bring items of the same conceptually pre-defined factors closer; except for the extraversion ones. 
+
+The first factor seems to characterize extraversion, since its 
+positive and negative edges are identified with those of the 5 E-items. E1 and E2 are definitely the opposite of E3, E4 and E5. 
+
+- E1: "Don't talk a lot"
+- E2: "Find it difficult to approach others"
+- E3: "Know how to captivate people"
+- E4: "Make friends easily"
+- E5: "Take charge"
+
+## 
 
 
 
