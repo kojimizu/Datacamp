@@ -1153,12 +1153,33 @@ The square boxes are the observed variables, and the ovals are the unobserved fa
 
 Moreover, the red arrows indicate negative correlation of the item to the extracted factor. Curved arrows between the factors indicate correlations between factors. If no curved arrow is present, as in our case, the correlation between the factors is not great. 
 
-Our five-factor `EFA` model `f_bfi_varimax` seems to reflect the expected factor structure nicely, since items of the same pre-defined putative factor on the left are almost identified with a factor 
+Our five-factor `EFA` model `f_bfi_varimax` seems to reflect the expected factor structure nicely, since items of the same pre-defined putative factor on the left are almost identified with a factor on te right; except for the N4 item that correlates negatively to Extraversion along with the other "E" items; something that calls for further processing and interpretation. 
 
+N4 stands for "Often feel blue" and although it is classified as one of the descriptive aspects of Neuroticism, the data suggest that it does not fit properly to the presupposed factor. 
 
+On the contrary, it is slightly negatively related to Extraversion and this is not a surprise given the meaning of the expression. All other items are aligned with their initial classification to one of the five pre-defined, conceptually classified factors. 
 
+The path diagrams plots only the largest loadings for each item. Each item, though, loads on each of the factors to a greater or lesser extent. 
 
+```{r}
+principal(f_bfi_varimax$loadings, cut = 0)
+```
 
+By using the print function and setting its `cut` argument to 0, you can access the full factor loading matrix of the EFA model provided by the loadings properly of the `f_bfi_varimax` object. 
+
+The reason you need to set the `cut` argument to 0 is that, by default, values under 0. 1 are not shown in the output. These values represent the correlations between the variables in the row and the 5 factors, MR1 to MR5, in the columns. 
+
+In the lower end of the output, you can also find the cumulative percentage of variance covered by the 5 factor `EFA` model, namely 46.7%. 
+
+## Interpreting humor tyles and visual aid
+
+The study of factor loadings offered by our EFA models is a valuable tool for interpreting the various humor styles. Even more helpful is the guidance of the path diagram. In this exercise, you are asked to create, retrieve both f_hsq's factor loadings matrix and path diagram. Recall that the loaded f_hsq object represents an EFA model of 4 factors. Below are the questionnaire items as they were initially grouped, based on the type of humour that they encode:
+
+affiliative: 'Q1', 'Q5', 'Q9', 'Q13', 'Q17', 'Q21', 'Q25', 'Q29' self-enhancing: 'Q2', 'Q6', 'Q10', 'Q14', 'Q18', 'Q22', 'Q26', 'Q30' aggressive: 'Q3', 'Q7', 'Q11', 'Q15', 'Q19', 'Q23', 'Q27', 'Q31' self-defeating: 'Q4', 'Q8', 'Q12', 'Q16', 'Q20', 'Q24', 'Q28', 'Q32'
+
+```{r}
+
+```
 
 
 
