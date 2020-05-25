@@ -1109,9 +1109,51 @@ positive and negative edges are identified with those of the 5 E-items. E1 and E
 - E4: "Make friends easily"
 - E5: "Take charge"
 
-## 
+## Rotating the extracted factors 
 
+According to Martin et al. (2003), the `HSQ` represents a comprehensive self-report measure of everyday functions of humor. Following Martin et al.’s (2003) theory, humor is directly related to psychosocial well-being, i.e. humor is a social phenomenon and the different humor styles reflect different social traits of the individual, such as social control, status maintenance and group cohesion.
 
+Let's apply some rotation methods offered by the `fa()` function, in order to check whether Martin et al's (2003) theory cofirms the observations in the `HSQ` dataset. For completing the exercise, the EFA model object f_hsq and the correlation matrix hsq_polychoric are at your disposal. Recall that `hsq_polychoric`, was calculated with the `mixedCor()` function on our initial dataset, `hsq`.
+
+```{r}
+# Check the default rotation method.
+f_hsq$rotation
+
+# Try Promax with 4 factors.
+f_hsq_promax <- fa(hsq_polychoric, nfactors = 4, rotate = "promax")
+
+# Now, try Varimax, again with 4 factors.
+f_hsq_varimax <- fa(hsq_polychoric, nfactors = 4, rotate = "varimax")
+```
+
+## Interpretation of EFA and path diagrams 
+
+Recall that `EFA` is an exploratory method that involves a number of decisions in various stages of the process. 
+
+- Agreeableness (A1, A2, A3, A4, A5)
+- Conscientiousness (C1, C2, C3, C4, C5)
+- Extraversion (E1, E2, E3, E4, E5)
+- Neuroticism (N1, N2, N3, N4, N5)
+- Openess (O1, O2, O3, O4, O5)
+
+A plausible interpretation of the data that leads to discovery of real, latent constructs is what drives decisions on the extraction method, the number of factors to retain and the rotation method. 
+
+The path diagram is a good interpretation tool, implemented with the `fa`. `diagram()` function of the `psych` package, which demonstrates the relationship between the hidden factors and the observed variables. 
+
+A path diagram includes the highest-loading items for each factor and determines whether our EFA model represents an intepretable solution. 
+
+```{r}
+library(psych)
+
+# creating the path diagram
+fa.diagram(f_bfi_varimax)
+```
+
+The square boxes are the observed variables, and the ovals are the unobserved factors. The straight arrows are the loadings, the correlation between the factor and the observed variables. 
+
+Moreover, the red arrows indicate negative correlation of the item to the extracted factor. Curved arrows between the factors indicate correlations between factors. If no curved arrow is present, as in our case, the correlation between the factors is not great. 
+
+Our five-factor `EFA` model `f_bfi_varimax` seems to reflect the expected factor structure nicely, since items of the same pre-defined putative factor on the left are almost identified with a factor 
 
 
 
