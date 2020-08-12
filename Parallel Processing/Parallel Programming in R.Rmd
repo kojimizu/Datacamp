@@ -1,0 +1,717 @@
+---
+title: "Parallel Programming in R"
+author: "Koji Mizumura"
+date: "2020-08-01 - `r Sys.Date()`"
+output: 
+  rmdformats::readthedown:
+    number_sections: yes
+    fig_height: 10
+    fig_width: 14
+    highlight: kate
+    toc_depth: 3
+  word_document:
+    toc: yes
+    toc_depth: '4'
+#    css: style.css
+  html_document:
+    number_sections: yes
+    section_divs: yes
+    theme: readable
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+always_allow_html: yes
+---
+
+```{r setup4, include=FALSE}
+# Set global knitr chunk options
+knitr::opts_chunk$set(
+  fig.align = "center",
+  # fig.height = 4.5,
+  error = FALSE,
+  message = FALSE, 
+  warning = FALSE, 
+  collapse = TRUE,
+  cache = TRUE
+)
+
+# this is linked to Github Desktop
+```
+
+## Partitioning problems into independent pieces
+
+1. Methods of parallel programming & supporting R packages
+2. The `parallel` core package in detail
+3. Packages `foreach` and `future.apply`
+4. Random numbers & reproducibility and final example
+
+To split data 
+
+1. By task: apply different tasks to the same or different data
+2. By data: The same task is performed on different data
+
+The 2nd option is much more common and it will be the focus of this course. 
+
+When we have a large number of tasks that have low or no communication needs. 
+
+## Find the most frequent words in a text
+
+We will now turn to partitioning by data. Here is an example that will be used throughout the course: In the given text, find the most frequent words that start with each letter of the alphabet and are at least a given length long. You'll use the janeaustenr package with its 6 books by Jane Austen, which is available in your environment. Also loaded are the stringr package and the function janeausten_words(), which extracts words from the 6 books and converts them to lowercase. Here, the specific task is to find, for each letter of the alphabet, the most frequent word that is at least five characters long. Your job is to partition this task into independent pieces.
+
+```{r}
+# Vector of words from all six books
+words <- janeausten_words()
+
+# Most frequent "a"-word that is at least 5 chars long
+max_frequency(letter = "a", words = words, min_length = 5)
+
+# Partitioning
+result <- lapply(letters, max_frequency,
+                words = words, min_length = 5) %>% unlist()
+
+# Barplot of result
+ barplot(result, las = 2)
+```
+
+
+## Models of parallel computing 
+
+### Central Processing Unit
+
+1. Multi-processor (CPU, core) computer
+2. Cluster of single or multi-processors computers
+
+As the most imporant aspect, In order to run the code in parallel, we need at least two and ideally more processors or cores, cluster of single or multi-core computer connected via network. 
+
+The second most important aspect is the memory. Such systems havem memory, RAM that all processes can access and communicate through, and is therefore called shared memory. 
+
+Here, a process cannot access the memory of another process. Suc systems are often called message-passing systems, because processes comunicate via sending messages to one another.
+
+- Shared memory: shared memory software
+- Distributed memory: message-passing software 
+
+The advantage of message-passing software is that it can run on both systems, distributed as well as shared memory, as you will see through this course, which makes applications independent of the underlying hardware. 
+
+### Programming paradims
+
+- master-worker model
+- map-reduce model (covered in `scalable data processing in R`)
+  - applications for distributed data
+  - Hadoop, Spark
+  
+
+One is the master-worker model, sometimes called the master-slave model. The other is the map-reduce model, which emerged from the need to develop generic applications that could also run on distributed data, that is data pysically distributed on different devices. 
+
+In this course, you will learn about the master-worker model which is simple, yet very powerful. Remember our embarrassingly parallel for-loop pseudo-code simulation? 
+
+```{r eval=FALSE}
+initialize_rng()
+for (it in 1:N) result[it] <- myfunc(...)
+process(result, ...)
+```
+
+All N calls to `myfunc()` can be run in parallel. However, in reality, N is often much larger than the number of available processors. 
+
+```{r}
+knitr::include_graphics("master_worker_model.png")
+```
+
+There is one process called master, which creates a set of other processes, the workers and distributes tasks among them. Workers perfrom their task and return results to the master process, which in turn performs the final processing. 
+
+The master-worker model is well suited for embarrasingly parallel applications. 
+
+## A simple embarassingly parallel application
+
+As a simple example of an embarrassingly parallel statistical application, we will repeatedly compute the mean of a set of normally distributed random numbers. For now, you will process it sequentially using a `for` loop, and the `sapply()` function.
+
+In general, we recommend to implement any task that will be repeatedly applied to data as a function. Here, the function will be called `mean_of_rnorm()`. It generates random numbers with `rnorm()`, then computes their mean.
+
+The objects n_numbers_per_replicate (set to 10000) and n_replicates (set to 50) have been created for you and determine the length of the random numbers vector and how many times the task is repeated, respectively.
+
+```{r}
+# From previous step
+mean_of_rnorm <- function(n) {
+  random_numbers <- rnorm(n)
+  mean(random_numbers)
+}
+
+# Repeat n_numbers_per_replicate, n_replicates times
+n <- rep(n_numbers_per_replicate, n_replicates)
+
+# Call mean_of_rnorm() repeatedly using sapply()
+result <- sapply(
+  # The vectorized argument to pass
+  n, 
+  # The function to call
+  mean_of_rnorm
+)
+
+# View the results
+hist(result)
+```
+
+## Probabilistic projection of migration
+
+Here, we'll continue the previous application. The 1000 sets of estimates in ar1est is a result of an estimation using migration data for the United States. The task is to project the future distribution of the US migration rate for 15 time points using the whole estimation dataset instead of just one row. You will generate a set of 10000 trajectories of length 15, each of which makes use of one parameter set, thus each parameter row is re-used 10 times. You will also visualize the results using a preloaded function `show_migration()`.
+
+```{r}
+# Function definition of ar1_multiple_blocks_of_trajectories()
+ar1_multiple_blocks_of_trajectories <- function(ids, ...) {
+  # Call ar1_block_of_trajectories() for each ids
+  trajectories_by_block <- lapply(ids, ar1_block_of_trajectories, ...)
+  
+  # rbind results
+  do.call(rbind, trajectories_by_block)
+}
+
+# Create a sequence from 1 to number of blocks
+traj_ids <- seq_len(nrow(ar1est))
+
+# Generate trajectories for all rows of the estimation dataset
+trajs <- ar1_multiple_blocks_of_trajectories(
+  ids = traj_ids, rate0 = 0.015,
+  block_size = 10, traj_len = 15
+)
+
+# Show results
+show_migration(trajs)
+```
+
+
+## R packages for parallel computing
+
+In this lesson, we will talk about a few R packages that support parallel computing. 
+
+- Core package: `parallel`
+- Parallel support for big data: such as Hadoop  and Spark etc. 
+  - sparkly, iotools
+  - pbdR
+- Embarassingly parallel, master-worker model:
+  - foreach, future.apply
+  - snow, snowFT, snowfall
+  - future
+
+If you want to experiemnt with that approach, you may look at the R package sparkly which offers an interface to the Apache Spark engine and the iotools pacakge presented in the Datacamp _Scalable data processing in R_.
+
+However, not all snow functionality has been ported over to parallel. snowFT is an extention to snow that adds important features, such as reproducibility and ease of use. However, these three packages may be a little outdated. 
+
+`future` pacake provides an abstraction layer, or a unified API for sequential and parallel processing. The `future` package which we will talk about in this course, is an implementation of the apply-type functions used in `future`.
+
+```{r eval=FALSE}
+library(parallel)
+ncores <- detectCores(logical = TRUE)
+
+# makeCluster() creates a cluster of nodes, or a cluster of workers
+
+cl <- makeCluster(ncores)
+clusterApply(cl, x = ncores:1, fun = rnorm)
+
+stopCluster(cl)
+```
+
+The current R session services as the master process, while each worker is a separate R process. Te workhorse of the parallel package is the function `clusterApply()`. 
+
+- cluster object: `cl`
+- sequence whose length determines how many times the function fun, which is the third argument is going to be evaluated. 
+- when a cluster is not needed anymore, it is closed using the function `stopCluster()`.
+
+## Passing arguments via `clusterApply()`
+
+We will use a similar example as in the last lesson where we evaluated rnorm() on a sequence c(4,3,2,1) in parallel, except this time you will pass additional arguments to rnorm(). These can be added to the clusterApply() function.
+
+For comparison, you'll create a sequential solution using lapply() in Step 2 of this exercise and create a parallel solution in Step 3.
+
+Even though computers have often more logical cores than physical cores, there is no speed advantage of running R processes on more than the number of physical cores.
+
+```{r}
+# Load parallel
+library(parallel)
+
+# How many physical cores are available?
+ncores <- detectCores(logical = FALSE)
+
+# How many random numbers to generate
+n <- ncores:1
+
+# From previous step
+library(parallel)
+ncores <- detectCores(logical = FALSE)
+n <- ncores:1
+
+# Use lapply to call rnorm for each n,
+# setting mean to 10 and sd to 2 
+lapply(n, rnorm, mean = 10, sd = 2)
+
+# From previous step
+library(parallel)
+ncores <- detectCores(logical = FALSE)
+n <- ncores:1
+
+# Create a cluster
+cl <- makeCluster(ncores)
+
+# Use clusterApply to call rnorm for each n in parallel,
+# again setting mean to 10 and sd to 2 
+clusterApply(cl, x = ncores:1, fun = rnorm, mean = 10, sd = 2)
+
+# Stop the cluster
+stopCluster(cl)
+```
+
+
+## Sum in parallel
+
+In the first lesson, you learned how to split sum(1:100) into independent pieces. For two cores, you can do sum(1:50) + sum(51:100). Here, we'll implement this using clusterApply(). The parallel package is preloaded, as well as a cluster object cl with two workers.
+
+```{r}
+# Evaluate partial sums in parallel
+part_sums <- clusterApply(cl, x = c(1, 51),
+                    fun = function(x) sum(x:(x + 49)))
+# Total sum
+total <- sum(unlist(part_sums))
+
+# Check for correctness
+total == sum(1:100)
+```
+
+## More tasks than workers
+
+You will now parallelize your simple embarrassingly parallel application from a previous exercise. To repeatedly evaluate mean_of_rnorm() that computes the mean of a set of random numbers, a sequential for-loop solution looks as follows:
+
+for(iter in seq_len(n_replicates)) 
+    result[iter] <- mean_of_rnorm(n_numbers_per_replicate)
+The iterations are independent of one another. Thus, we can convert it into a parallel form. Notice that we are now distributing many more tasks (namely n_replicates) than we have workers available.
+
+The function mean_of_rnorm() is preloaded, as is the parallel library.
+
+```{r}
+# Create a cluster and set parameters
+cl <- makeCluster(2)
+n_replicates <- 50
+n_numbers_per_replicate <- 10000
+
+# Parallel evaluation on n_numbers_per_replicate, n_replicates times
+means <- clusterApply(cl, 
+             x = rep(n_numbers_per_replicate, n_replicates), 
+             fun = mean_of_rnorm)
+                
+# View results as histogram
+hist(unlist(means))
+```
+
+
+# The parallel package 
+
+## Cluster basics 
+
+The parallel package consists of two parts, each of which is a re-implementation of a user-contributed package. One group of functions provide functionality originally, implemented in the `snow` package developed by Luke Tierney and others.
+
+The other group of functions come from the multicore package developed by Simon Urbanek. The snow part uses message passing methods and therefore can be used on both, systems with distributed as well as shared memory.
+
+Multicore on the other hand, takes advantage of shared memory, 
+methods and thus, can be used only on single multi-core machines. 
+
+### Supported backends
+
+__Sock__ et communication (Default, all OS platform)
+
+```{r}
+cl <- makeCluster(ncores, type = "PSOCK")
+```
+
+- Workers start with an empty environment (i.e., new R process)
+
+__Forking__ (not available for windows)
+
+```{r}
+cl <- makeCluster(ncores, type = "FORK")
+```
+
+- Workers are complete copies of the master process.
+
+Using the MPI library( use `Rmpi`)
+
+```{r}
+cl <- makeCluster(ncores, type ="MPI")
+```
+
+
+### Exploring the cluster oject
+
+In this exercise, you will explore the cluster object created by makeCluster(). In addition, you will use clusterCall(), which evaluates a given function on all workers. This can be useful, for example, when retrieving information from workers.
+
+clusterCall() takes two arguments: the cluster object and the function to apply to each worker node. Just like lapply(), the function is passed without parentheses.
+
+Here, we will use clusterCall() to determine the process ID of the workers, which is equivalent to finding process IDs of R sessions spawned by the master. Such info could be used for process management, including things outside of R.
+
+```{r}
+# Load the parallel package
+library(parallel)
+
+# Make a cluster with 4 nodes
+cl <- makeCluster(4)
+
+# Investigate the structure of cl
+str(cl)
+
+# What is the process ID of the workers?
+clusterCall(cl, Sys.getpid)
+
+# Stop the cluster
+stopCluster(cl)
+```
+
+## Socket vs. Fork
+
+Now we will explore differences between the socket and the fork backends. In a fork cluster, each worker is a copy of the master process, whereas socket workers start with an empty environment. We define a global object and check if workers have an access to it under each of the backends. Your job is to use the function `clusterCall()` to look for the global object in the workers' environment.
+
+The package parallel and the `print_global_var()` function, which calls `print(a_global_var)`, are available in your workspace.
+
+```{r}
+# A global variable and is defined
+a_global_var <- "before"
+
+# Create a socket cluster with 2 nodes
+cl_sock <- makeCluster(2, type = "PSOCK")
+
+# Evaluate the print function on each node
+clusterCall(cl_sock, print_global_var)
+
+# Stop the cluster
+stopCluster(cl_sock)
+
+# A global variable and is defined
+a_global_var <- "before"
+
+# Create a fork cluster with 2 nodes
+cl_fork <- makeCluster(2, type = "FORK")
+
+# Evaluate the print function on each node
+clusterCall(cl_fork, print_global_var)
+
+# Stop the cluster
+stopCluster(cl_fork)
+
+# A global variable and is defined
+a_global_var <- "before"
+
+# Create a fork cluster with 2 nodes
+cl_fork <- makeCluster(2, type = "FORK")
+
+# Change the global var to "after"
+a_global_var <- "after"
+
+# Evaluate the print fun on each node again
+clusterCall(cl_fork, fun = print_global_var)
+
+# Stop the cluster
+stopCluster(cl_fork)
+```
+
+
+## The core of parallel
+
+
+We will talk about the core package . 
+
+
+Main processing function
+
+- `clusterApply`: does most of the work when a parallel application is processed. 
+- `clusterApplyLB`: work is distributed among workers is the function `clusterApplyLB()`, where LF meas load balanced.
+
+Wrappers 
+- `parApply`, `parLapply`, `parSapply`
+- `paRapply,` `parCapply`
+
+Functions parRapply() and parCapply() are parallel row and column apply() functions for matrices. These five functions are wrapper around the clusterApply() functiin.
+
+In this course, we will mainly talk about `clusterApply()` and `clusterApplyLB()` as tey provide more flexibility.
+
+However, the wrapper functions are useful if your data falls nicely into the apply() framework, as they do some post-processing, like putting results into the required shape.
+
+### ClusterApply: Number of tasks
+
+Here is  an example of a clusterApply() call. 
+
+```{r eval=FALSE}
+clusterApply(cl, x = arg_sequence,
+             fun = myfunc)
+```
+
+- The length of the argument `x` determines the number of tasks that is sent to workers.
+- Sequence object determines the number of green bars. This is important to remember, because communication between master and worker is expensive in terms of processing time, so ideally we want to minimize sending messages.
+
+### Parallel vs Sequential
+
+Not all embarrassingly parallel applications are suited for parallel processing. 
+
+- Processing overhead: There is an overhead that one needs to take into account when designing parallel applications.
+- The number of messages sent between nodes and master contributes to the overhead.
+- Size of messages (sending bi data is expensive): the size of messages can make a difference
+
+Therefore, when you design parallel applications, there are a few things to consider. 
+
+1) How big the single task that will be repeatedly evaluated, that is the green bar in the previous picture.
+2) How much data needs to be sent back and fort 
+3) How much overall gain is there by running the application in parallel as oppose to running it sequentially.  
+
+## Benchmarking set-up
+
+In this exercise, you will take the simple embarrassingly parallel application for computing mean of random numbers (`mean_of_rnorm()`) from the first chapter, and implement two functions: One that runs the application sequentially, `mean_of_rnorm_sequentially()`, and one that runs it in parallel,` mean_of_rnorm_in_parallel()`. We will then benchmark these two functions in the next exercise.
+
+`mean_of_rnorm()` and a cluster object, cl, are defined.
+
+```{r}
+# Wrap this code into a function
+mean_of_rnorm_sequentially <- function(n_numbers_per_replicate, n_replicates){
+n <- rep(n_numbers_per_replicate, n_replicates)
+lapply(n, mean_of_rnorm)}
+
+
+# Call it to try it
+mean_of_rnorm_sequentially(1000, 5)
+
+# Wrap this code into a function
+mean_of_rnorm_in_parallel <- function(n_numbers_per_replicate, n_replicates){
+n <- rep(n_numbers_per_replicate, n_replicates)
+clusterApply(cl, n, mean_of_rnorm) }
+
+
+# Call it to try it
+mean_of_rnorm_in_parallel(1000, 5)
+
+```
+
+
+## Task size matters 
+
+Now you will benchmark the functions created in the previous exercise using the `microbenchmark` package. To see the impact of the parallel processing overhead, you will pass different number of replications and sample sizes and explore under which conditions parallel processing becomes inefficient.
+
+`mean_of_rnorm_sequentially()`, mean_of_rnorm_in_parallel(), and a cluster cl with two nodes are available.
+
+```{r}
+# Set numbers per replicate to 5 million
+n_numbers_per_replicate <- 5e6
+
+# Set number of replicates to 4
+n_replicates <- 4
+
+# Run a microbenchmark
+microbenchmark(
+  # Call mean_of_rnorm_sequentially()
+  mean_of_rnorm_sequentially(n_numbers_per_replicate, n_replicates), 
+  # Call mean_of_rnorm_in_parallel()
+  mean_of_rnorm_in_parallel(n_numbers_per_replicate, n_replicates),
+  times = 1, 
+  unit = "s"
+)
+
+# Change the numbers per replicate to 100
+n_numbers_per_replicate <- 100
+
+# Change number of replicates to 100
+n_replicates <- 100
+
+# Rerun the microbenchmark
+microbenchmark(
+  mean_of_rnorm_sequentially(n_numbers_per_replicate, n_replicates), 
+  mean_of_rnorm_in_parallel(n_numbers_per_replicate, n_replicates),
+  times = 1, 
+  unit = "s"
+)
+```
+
+
+## Initialization of nodes
+
+In this lesson, we will talk about how workers, or nodes can be initialized. 
+
+### Why to initialize
+
+- Each cluster node starts with an empty environment (no libraries loaded).
+- Repeated communication with the master is expensive. 
+- Example 
+
+We use the `clusterApply()` function to repeatedly call `rnorm()` to generate 1000 random numbers in each of the n repetitions. The standard deviation of the 1000 numbers ranges from 1 to 1000, and it is the same in each of the n calls. 
+
+```{r}
+clusterApply(cl, rep(1000,n), rnorm, sd = 1:1000)
+```
+
+  - the master has to send a vector of 1:1000 to all n tasks.
+
+- Good practice: Master initializes workers at the beginning with everything that says constant or/and is time consuming. Examples: 
+
+  - sending static data
+  - loading libraries 
+
+
+There are three functions we will talk about here:
+
+### clusterCall
+
+- Evaluate the same function with the same arguments on all nodes.
+
+We create a a cluster of size two, then we use clusterCall() to call a function on both nodes that loads the janeaustenr library.Now both nodes are ready ot use functions and data from the janeaustenr package. 
+
+We can test it by using `clusterCall()` to call a function on both nodes that returns the 20-th element of the emma data set, which is a dataset from the janeaustenr package.
+
+And yes, both nodes know the emma dataset and they both return the same row from the Emma book. 
+
+```{r eval=FALSE}
+cl <- makeCluster(2)
+clusterCall(cl, function(), library(janeaustenr))
+```
+  
+The second function, maybe more convenient than `clusterCall()`, is `clusterEvalQ()`. 
+
+### ClusterEvalQ
+
+- Evaluate a literal expression on all nodes (equivalent to `evalq()`). 
+
+After creating a cluster, we use clusterEvalQ() to evaluate and expression composed from three steps.
+
+1) First loading the janeaustenr package
+2) Second, loading the stringr package
+3) define a function called `get_books() which` returns a vector of names of books included in the package. 
+
+Both nodes will be initialized with two libraries and they both have the function `get_books()` in their global enviroment. 
+
+To test it, we use clusterCall() to evaluate a function that returns the first three elements of the book vector 
+
+
+```{r eval=FALSE}
+cl <- makeCluster(2)
+clusterEvalQ(cl, {
+  library(janeaustenr)
+  library(stringr)
+  get_books <- function() austen_books()$book %>% 
+    as.character
+})
+
+clusterCall(cl, function(i) get_book()[i], 1:3)
+```
+
+### clusterExport
+
+- Exports given objects from master to workers
+
+The objects are give by their names, and they must exist in the master process. As an example, we define an object called books, which is the result of the `get_books()` function.
+
+We create a cluster and export the books object by passing its name. 
+
+```{r eval=FALSE}
+books <- get_books()
+cl <- makeCluster(2)
+clusterExport(cl, "books")
+
+clusterCall(cl, function() print(books))
+```
+
+
+## Loading package on nodes 
+
+In this example, you will run a simple application in parallel that requires the package extraDistr. You will see that if you load it only on the master, the code will fail. Then you will use the function clusterEvalQ() to load the package on all cluster nodes.
+
+The parallel package and a 4-node cluster object cl with socket backend is available in your workspace. You will use a pre-defined function myrdnorm() that takes n, mean, and sd as arguments and passes it to the rdnorm() function from extraDistr to generate n random numbers from the discrete normal distribution with given mean and standard deviation.
+
+```{r}
+# Pre-defined myrdnorm 
+myrdnorm <- function(n, mean = 0, sd = 1) 
+    rdnorm(n, mean = mean, sd = sd)
+
+# Parameters
+n_numbers_per_replicate <- 1000
+n_replicates <- 20
+
+# Repeat n_numbers_per_replicate, n_replicates times
+n <- rep(n_numbers_per_replicate, n_replicates)
+
+# Load extraDistr on master
+library(extraDistr)
+
+# Run myrdnorm in parallel. This should fail!
+res <- clusterApply(cl, n, myrdnorm)
+
+# From previous step
+myrdnorm <- function(n, mean = 0, sd = 1) 
+    rdnorm(n, mean = mean, sd = sd)
+n_numbers_per_replicate <- 1000
+n_replicates <- 20
+n <- rep(n_numbers_per_replicate, n_replicates)
+
+# Load extraDistr on master
+library(extraDistr)
+
+# Load extraDistr on all workers
+clusterEvalQ(cl, library(extraDistr))
+
+# Run myrdnorm in parallel. It should work now!
+res <- clusterApply(cl, n, myrdnorm)
+
+# Plot the result
+plot(table(unlist(res)))
+
+```
+
+## Setting global variables
+
+Here you will use a slight modification of the previous example, where instead of passing the mean and sd parameters as arguments, they will be defined in the worker's environment as global variables. You will use the `clusterEvalQ()` function again for the worker initialization.
+
+As before, the parallel package and the cluster object cl are available in your workspace. A variant of `myrdnorm()` that uses global variables is shown in the script.
+
+```{r}
+# From previous step
+myrdnorm <- function(n) {
+  rdnorm(n, mean = mean, sd = sd)
+}
+
+# Set number of numbers to generate
+n <- rep(1000, 20)
+
+# Run an expression on each worker
+clusterEvalQ(
+  cl, {
+    # Load extraDistr
+    library(extraDistr)
+    # Set mean to 10
+    mean <- 10
+    # Set sd to 5
+    sd <- 5
+})
+
+# Run myrdnorm in parallel
+res <- clusterApply(cl, n, myrdnorm)
+
+# Plot the results
+plot(table(unlist(res)))
+```
+
+## Exporting global objects
+
+Using `clusterEvalQ()` for setting global variables as in the last example assigns them only on the nodes and not on the master. If you want to share the same objects between master and the nodes, use the function `clusterExport()`. Here we use the same function as in the last exercise, `myrdnorm()` and initialize the global objects first on the master. Then you will use `clusterExport()` to export those objects to the workers.
+
+clusterExport() takes two arguments: a cluster object and a character vector of variable names to copy from the master to the nodes.
+
+The parallel package, a cluster object of size four, cl, the function `myrdnorm()`, and the number of numbers to generate, n, are available.
+
+```{r}
+# Set global objects on master: mean to 20, sd to 10
+mean <- 20
+sd <- 10
+
+# Load extraDistr on workers
+clusterEvalQ(cl, library(extraDistr))
+
+# Export global objects to workers
+clusterExport(cl, c("mean", "sd"))
+
+# Run myrdnorm in parallel
+res <- clusterApply(cl, n, myrdnorm)
+
+# Plot the results
+plot(table(unlist(res)))
+```
+
+## Subsetting data
